@@ -9,26 +9,31 @@
 
 ## Key Features
 
-*   **Native Interception:** Hooks `libuv` and `libc` file system calls (`open`, `openat`, etc.) using dynamic linker hijacking.
-*   **Context-Aware Attribution:** Automatically correlates native I/O requests back to the specific JavaScript module/package that triggered them via V8 stack introspection.
-*   **Smart Symbol Discovery:** Automatically discovers V8 internal symbols at compile-time by inspecting the local Node.js binary, ensuring compatibility across versions without fragile hardcoding.
-*   **Sticky Context Heuristic:** Maintains security context across asynchronous boundaries and worker threads.
-*   **Zero-Allocation Policy Engine:** Ultra-fast Radix Tree-based evaluation implemented in Rust for minimal latency (< 0.04ms overhead).
-*   **Capability Spoofing:** Seamlessly redirects unauthorized access to synthetic mock data instead of failing, allowing applications to continue running safely.
-*   **Centralized Observability:** Professional structured logging using the `tracing` ecosystem.
+*   **Native Interception:** Hooks `libuv` and `libc` system calls (`open`, `connect`, `dlopen`, etc.) using dynamic linker hijacking.
+*   **Context-Aware Attribution:** Automatically correlates native I/O and network requests back to the specific JavaScript module/package via V8 stack introspection.
+*   **Modular Security Mesh:** Cleanly separated architecture with dedicated managers for Filesystem, Networking, Attribution, and Kernel-level Hardening.
+*   **Robust Globset Matching:** High-performance, Regex-backed path matching via the `globset` crate, ensuring absolute path canonicalization.
+*   **Smart Network Enforcement:** Hybrid domain and CIDR-based filtering with a "Smart DNS Verifier" to solve the blind-IP problem on Android.
+*   **Seccomp-BPF Protection:** Kernel-level sandbox enforcing a strict syscall whitelist to prevent native bypasses and direct kernel escapes.
+*   **Capability Spoofing:** Seamlessly redirects unauthorized access to synthetic mock data instead of failing.
 
 ---
 
 ## Architecture
 
-Astraea leverages a unique hybrid architecture to maximize performance and portability:
+Astraea leverages a modular architecture:
 
-1.  **The Interceptor (Zig):** A lightweight C-ABI wrapper that hijacks system calls. Zig's `@cImport` provides seamless, zero-overhead access to `libuv` headers.
-2.  **The Engine (Rust):** The "brain" of the system. It uses a custom build-time discovery script to link into V8's internal symbols, allowing it to perform deep stack introspection and evaluate policies against a high-performance Radix Tree.
+1.  **The Interceptor (Zig):** A lightweight C-ABI wrapper that hijacks system calls and forwards context to the engine.
+2.  **The Engine (Rust):** The core orchestrator, featuring:
+    *   **FsManager:** Manages robust glob-based filesystem capabilities.
+    *   **NetManager:** Handles CIDR-based networking and DNS-to-IP verification.
+    *   **Attribution Engine:** Performs deep V8 stack introspection.
+    *   **Guardian:** Generates and applies Seccomp-BPF filters.
 
 ---
 
-## Documentation Index
+## Getting Started
+
 
 Explore the technical specifications and research in the [`docs/`](docs/) directory:
 
@@ -72,13 +77,15 @@ Policies are defined in a simple TOML manifest. You can restrict access by packa
 
 ```toml
 [packages.root]
-fs = [
-    "read:package.json",
-    "read:src/**"      # Wildcard support via Radix Tree
-]
+fs = ["read:package.json", "read:src/**"]
+native_addons = ["*.node"]
+network = ["allow:api.github.com:443", "allow:127.0.0.1:53"]
 
 [packages.axios]
-fs = ["read:certs/**"]
+network = ["allow:*.github.com:*"]
+
+[seccomp]
+allowed_syscalls = ["ptrace"] # Optional extra syscalls
 
 [spoofs]
 "config/secrets.json" = "{\"key\": \"mocked_value\"}"

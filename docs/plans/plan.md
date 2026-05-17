@@ -55,11 +55,16 @@ A high-performance policy evaluator designed for minimal impact on the Node.js e
 *   [x] **Clippy Compliance:** Strict adherence to Rust engineering standards.
 *   [x] **Formal Benchmarking:** Documented performance profile (~36µs overhead).
 
+### Phase 5: Native Bypass Mitigation [COMPLETE]
+*   [x] **Seccomp-BPF Integration:** Strict syscall whitelist to prevent direct kernel escapes.
+*   [x] **dlopen Interception:** Granular control over native addon loading per package.
+*   [x] **Architecture Hardening:** Dedicated `guardian` module for low-level process security.
+
 ---
 
 ## 4. Security Considerations
 *   **Native Bypasses:** Malicious modules using custom native addons to invoke direct `syscalls` (e.g., via `asm`). 
-    *   *Strategic Mitigation:* Restrict `process.dlopen` and integrate with Linux `seccomp` in future iterations.
+    *   *Mitigation:* Astraea restricts `dlopen` calls and enforces a Linux `seccomp-bpf` filter to block unauthorized syscalls at the kernel level.
 *   **Path Normalization:** Astraea performs in-place path normalization to prevent bypasses via `../` traversal or redundant slashes.
 
 ---

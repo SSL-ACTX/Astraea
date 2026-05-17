@@ -1,8 +1,20 @@
 [packages.root]
-fs = ["read:astraea.toml", "read:docs/plans/plan.md", "read:tests/**"]
+fs = ["read:astraea.toml", "read:docs/plans/plan.md", "read:tests/**", "read:/etc/nsswitch.conf", "read:/etc/resolv.conf"]
+native_addons = ["*.node"] # Root is allowed to load any addon by default
+network = [
+    "allow:api.github.com:80", 
+    "allow:api.github.com:443", 
+    "allow:*.github.com:*",
+    "allow:127.0.0.1:53",      # Local DNS
+    "allow:8.8.8.8:53",        # Google DNS
+    "allow:8.8.4.4:53"
+]
 
 [packages.eval]
 fs = ["read:plan.md"]
+
+[seccomp]
+allowed_syscalls = ["mprotect", "mmap"] # Extra syscalls if needed
 
 [spoofs]
 "secret.txt" = "THIS IS MOCKED DATA BY ASTRAEA"

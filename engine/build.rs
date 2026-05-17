@@ -1,8 +1,8 @@
-use std::process::Command;
 use std::collections::HashMap;
-use std::path::Path;
 use std::env;
 use std::fs;
+use std::path::Path;
+use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -10,7 +10,7 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("v8_bindings.rs");
 
-    // 1. Find the node binary
+    // Resolve the Node.js binary path for symbol discovery.
     let mut node_path = String::from("/data/data/com.termux/files/usr/bin/node");
     if !Path::new(&node_path).exists() {
         let which_node = Command::new("which")
@@ -18,14 +18,19 @@ fn main() {
             .output()
             .expect("failed to run which node");
         if which_node.status.success() {
-            node_path = String::from_utf8_lossy(&which_node.stdout).trim().to_string();
+            node_path = String::from_utf8_lossy(&which_node.stdout)
+                .trim()
+                .to_string();
         } else {
             panic!("Node.js binary not found. V8 discovery failed. Ensure 'node' is in your PATH.");
         }
     }
 
-    // 2. Get mangled symbols (Address -> Mangled Name)
-    let nm_mangled = Command::new("nm").args(["-D", &node_path]).output().expect("failed to run nm");
+    // Map virtual addresses to mangled C++ symbols using nm.
+    let nm_mangled = Command::new("nm")
+        .args(["-D", &node_path])
+        .output()
+        .expect("failed to run nm");
     let mangled_out = String::from_utf8_lossy(&nm_mangled.stdout);
     let mut addr_to_mangled = HashMap::new();
     for line in mangled_out.lines() {
@@ -35,8 +40,11 @@ fn main() {
         }
     }
 
-    // 3. Get demangled symbols (Address -> Demangled Name)
-    let nm_demangled = Command::new("nm").args(["-D", "--demangle", &node_path]).output().expect("failed to run nm --demangle");
+    // Resolve demangled signatures to their corresponding mangled identifiers.
+    let nm_demangled = Command::new("nm")
+        .args(["-D", "--demangle", &node_path])
+        .output()
+        .expect("failed to run nm --demangle");
     let demangled_out = String::from_utf8_lossy(&nm_demangled.stdout);
     let mut demangled_to_mangled = HashMap::new();
     for line in demangled_out.lines() {
@@ -50,7 +58,7 @@ fn main() {
         }
     }
 
-    // 4. Define our target functions and their expected signatures
+    // Define internal V8 target functions and their expected demangled signatures.
     let targets = vec![
         ("v8_isolate_try_get_current", "v8::Isolate::TryGetCurrent()"),
         ("v8_handle_scope_ctor", "v8::HandleScope::HandleScope(v8::Isolate*)"),
@@ -65,8 +73,10 @@ fn main() {
 
     let mut bindings = String::from("extern \"C\" {\n");
     for (rust_name, cpp_sig) in targets {
-        let mangled = demangled_to_mangled.get(cpp_sig).unwrap_or_else(|| panic!("Could not find symbol for {}", cpp_sig));
-        
+        let mangled = demangled_to_mangled
+            .get(cpp_sig)
+            .unwrap_or_else(|| panic!("Could not find symbol for {}", cpp_sig));
+
         let decl = match rust_name {
             "v8_isolate_try_get_current" => format!("    #[link_name = \"{}\"]\n    pub fn v8_isolate_try_get_current() -> *mut c_void;", mangled),
             "v8_handle_scope_ctor" => format!("    #[link_name = \"{}\"]\n    pub fn v8_handle_scope_ctor(this: *mut c_void, isolate: *mut c_void);", mangled),
