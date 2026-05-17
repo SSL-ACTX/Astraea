@@ -10,6 +10,7 @@ use tracing_subscriber::FmtSubscriber;
 
 // Modules
 mod attribution;
+mod audit;
 mod fs;
 mod guardian;
 mod net;
@@ -17,6 +18,7 @@ mod proc_env;
 mod v8;
 
 use attribution::*;
+use audit::{AuditEvent, AuditLogger};
 use fs::FsManager;
 use net::NetManager;
 use proc_env::ProcEnvManager;
@@ -66,6 +68,7 @@ struct AstraeaEngine {
     proc_env: ProcEnvManager,
     native_addon_rules: HashMap<String, Vec<String>>,
     seccomp: SeccompConfig,
+    audit: Option<AuditLogger>,
 }
 
 static ENGINE: Lazy<AstraeaEngine> = Lazy::new(|| {
@@ -81,12 +84,16 @@ static ENGINE: Lazy<AstraeaEngine> = Lazy::new(|| {
         native_addon_rules.insert(name.clone(), policy.native_addons.clone());
     }
 
+    let audit_path = std::env::var("ASTRAEA_AUDIT").ok();
+    let audit = audit_path.and_then(|p| AuditLogger::new(&p));
+
     AstraeaEngine {
         fs: FsManager::new(manifest.packages.clone(), manifest.spoofs),
         net: NetManager::new(manifest.packages.clone()),
         proc_env: ProcEnvManager::new(manifest.packages),
         native_addon_rules,
         seccomp: manifest.seccomp,
+        audit,
     }
 });
 // --- FFI Interface ---
@@ -115,6 +122,17 @@ pub extern "C" fn init_engine() {
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
 
     info!("Astraea engine ready.");
+}
+
+fn log_event(package: String, action: &str, target: &str, allowed: bool) {
+    if let Some(audit) = &ENGINE.audit {
+        audit.log(AuditEvent {
+            package,
+            action: action.to_string(),
+            target: target.to_string(),
+            allowed,
+        });
+    }
 }
 
 /// C-ABI logging interface for the Zig interceptor.
@@ -185,12 +203,15 @@ pub unsafe extern "C" fn evaluate_fs_access(
 
         if let Some(spoof_path) = ENGINE.fs.get_spoof(path_str) {
             info!(target: "astraea", "SPOOF: package '{}' -> '{}' (redirected to mock)", package, path_str);
+            log_event(package, "fs", &format!("spoof:{}", path_str), true);
             return (DECISION_SPOOF, Some(spoof_path));
         }
 
         if ENGINE.fs.is_allowed(&package, path_str) {
+            log_event(package, "fs", &format!("read:{}", path_str), true);
             (DECISION_ALLOW, None)
         } else {
+            log_event(package, "fs", &format!("read:{}", path_str), false);
             (DECISION_DENY, None)
         }
     })();
@@ -241,6 +262,10 @@ pub unsafe extern "C" fn evaluate_dlopen(path: *const c_char) -> i32 {
         package == "root"
     };
 
+    if is_addon {
+        log_event(package.clone(), "native_addons", path_str, allowed);
+    }
+
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
 
     if !allowed {
@@ -258,7 +283,12 @@ pub unsafe extern "C" fn evaluate_dlopen(path: *const c_char) -> i32 {
 ///
 /// The `host` pointer must be a valid, null-terminated C string.
 #[no_mangle]
-pub unsafe extern "C" fn evaluate_net_access(host: *const c_char, port: u16) -> i32 {
+pub unsafe extern "C" fn evaluate_net_access(
+    host: *const c_char,
+    port: u16,
+    action: i32,
+    protocol: i32,
+) -> i32 {
     if host.is_null() {
         return DECISION_ALLOW;
     }
@@ -276,7 +306,27 @@ pub unsafe extern "C" fn evaluate_net_access(host: *const c_char, port: u16) -> 
     };
 
     let package = get_current_package();
-    let allowed = ENGINE.net.is_allowed(&package, host_str, port);
+    let allowed = ENGINE
+        .net
+        .is_allowed(&package, host_str, port, action, protocol);
+
+    let action_str = match action {
+        1 => "bind",
+        _ => "connect",
+    };
+
+    let proto_str = match protocol {
+        6 => "tcp",
+        17 => "udp",
+        _ => "any",
+    };
+
+    log_event(
+        package,
+        "network",
+        &format!("{}:{}:{}:{}", action_str, proto_str, host_str, port),
+        allowed,
+    );
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
     if allowed {
@@ -312,6 +362,8 @@ pub unsafe extern "C" fn evaluate_env_access(key: *const c_char) -> i32 {
     let package = get_current_package();
     let allowed = ENGINE.proc_env.is_env_allowed(&package, key_str);
 
+    log_event(package, "env", key_str, allowed);
+
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
     if allowed {
         DECISION_ALLOW
@@ -345,6 +397,8 @@ pub unsafe extern "C" fn evaluate_proc_access(binary: *const c_char) -> i32 {
 
     let package = get_current_package();
     let allowed = ENGINE.proc_env.is_proc_allowed(&package, binary_str);
+
+    log_event(package, "proc", binary_str, allowed);
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
     if allowed {

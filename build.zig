@@ -51,6 +51,13 @@ pub fn build(b: *std.Build) void {
     link_cmd.addFileArg(rust_lib_path);
     link_cmd.addArg("-luv");
 
+    // Optimization and stripping flags for the final shared library
+    if (optimize != .Debug) {
+        link_cmd.addArg("-Wl,-s"); // Strip all symbols
+        link_cmd.addArg("-Wl,--gc-sections"); // Dead code elimination
+        link_cmd.addArg("-Wl,--exclude-libs,ALL"); // Hide statically linked symbols from dynamic table
+    }
+
     // Ensure all dependencies are met
     link_cmd.step.dependOn(&cargo_cmd.step);
     link_cmd.step.dependOn(&obj.step);

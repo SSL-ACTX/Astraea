@@ -43,3 +43,31 @@ asyncTest('NET: Raw IP connection blocking', async () => {
         });
     });
 });
+
+asyncTest('NET: Bind allowed in port range', async () => {
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.listen(8085, '127.0.0.1', () => {
+            server.close();
+            resolve();
+        });
+        server.on('error', (e) => {
+            reject(new Error(`Bind should have been allowed, got: ${e.code}`));
+        });
+    });
+});
+
+asyncTest('NET: Bind blocked outside port range', async () => {
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.listen(9000, '127.0.0.1', () => {
+            server.close();
+            reject(new Error('Bind should have been blocked'));
+        });
+        server.on('error', (e) => {
+            if (e.code === 'EACCES' || e.code === 'EPERM') resolve();
+            else reject(new Error(`Unexpected error code: ${e.code}`));
+        });
+    });
+});
+

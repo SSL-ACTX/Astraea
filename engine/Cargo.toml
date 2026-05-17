@@ -9,12 +9,17 @@ license = "AGPL-3.0-only"
 name = "engine"
 crate-type = ["staticlib"]
 
+[[bin]]
+name = "astraea-gen"
+path = "src/bin/astraea-gen.rs"
+
 [dependencies]
 libc = "0.2"
 dashmap = "6.1"
 once_cell = "1.20"
 toml = "0.8"
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 globset = "0.4"

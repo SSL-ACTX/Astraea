@@ -2,6 +2,53 @@ const std = @import("std");
 const common = @import("common.zig");
 const c = common.c;
 
+const socket_fn = *const fn (domain: c_int, type_: c_int, protocol: c_int) callconv(.c) c_int;
+var real_socket: ?socket_fn = null;
+
+export fn socket(domain: c_int, type_: c_int, protocol: c_int) callconv(.c) c_int {
+    if (real_socket == null) real_socket = common.getRealSymbol(socket_fn, "socket");
+
+    if (type_ == c.SOCK_RAW) {
+        common.log_warn("DENY SOCK_RAW creation", .{});
+        common.__errno().* = common.EACCES; // EACCES
+        return -1;
+    }
+
+    return if (real_socket) |func| func(domain, type_, protocol) else -1;
+}
+
+const bind_fn = *const fn (sockfd: c_int, addr: *const c.sockaddr, addrlen: c.socklen_t) callconv(.c) c_int;
+var real_bind: ?bind_fn = null;
+
+export fn bind(sockfd: c_int, addr: *const c.sockaddr, addrlen: c.socklen_t) callconv(.c) c_int {
+    if (real_bind == null) real_bind = common.getRealSymbol(bind_fn, "bind");
+
+    var ip_buf: [c.INET6_ADDRSTRLEN]u8 = undefined;
+    var port: u16 = 0;
+
+    if (addr.sa_family == c.AF_INET) {
+        const addr_in: *const c.sockaddr_in = @ptrCast(@alignCast(addr));
+        _ = c.inet_ntop(c.AF_INET, &addr_in.sin_addr, &ip_buf, c.INET_ADDRSTRLEN);
+        port = std.mem.bigToNative(u16, addr_in.sin_port);
+    } else if (addr.sa_family == c.AF_INET6) {
+        const addr_in6: *const c.sockaddr_in6 = @ptrCast(@alignCast(addr));
+        _ = c.inet_ntop(c.AF_INET6, &addr_in6.sin6_addr, &ip_buf, c.INET6_ADDRSTRLEN);
+        port = std.mem.bigToNative(u16, addr_in6.sin6_port);
+    }
+
+    const ip_slice = std.mem.sliceTo(&ip_buf, 0);
+
+    if (port != 0) {
+        // We pass 1 for action (Bind), 0 for protocol (Any)
+        if (common.evaluate_net_access(ip_slice.ptr, port, 1, 0) == common.DECISION_DENY) {
+            common.__errno().* = 13; // EACCES
+            return -1;
+        }
+    }
+
+    return if (real_bind) |func| func(sockfd, addr, addrlen) else -1;
+}
+
 const getaddrinfo_fn = *const fn (node: [*c]const u8, service: [*c]const u8, hints: ?*const c.addrinfo, res: [*c][*c]c.addrinfo) callconv(.c) c_int;
 var real_getaddrinfo: ?getaddrinfo_fn = null;
 
@@ -15,7 +62,7 @@ export fn getaddrinfo(node: [*c]const u8, service: [*c]const u8, hints: ?*const 
             const service_span = std.mem.span(service);
             port = std.fmt.parseInt(u16, service_span, 10) catch 0;
         }
-        if (common.evaluate_net_access(node, port) == common.DECISION_DENY) {
+        if (common.evaluate_net_access(node, port, 0, 0) == common.DECISION_DENY) {
             return c.EAI_NONAME;
         }
     }
@@ -53,7 +100,7 @@ export fn android_getaddrinfofornet(node: [*c]const u8, service: [*c]const u8, h
     if (real_android_getaddrinfofornet == null) real_android_getaddrinfofornet = common.getRealSymbol(android_getaddrinfofornet_fn, "android_getaddrinfofornet");
 
     if (node != null) {
-        if (common.evaluate_net_access(node, 0) == common.DECISION_DENY) {
+        if (common.evaluate_net_access(node, 0, 0, 0) == common.DECISION_DENY) {
             return c.EAI_NONAME;
         }
     }
@@ -92,7 +139,7 @@ export fn uv_getaddrinfo(loop: ?*c.uv_loop_t, req: ?*c.uv_getaddrinfo_t, cb: c.u
             const service_span = std.mem.span(service);
             port = std.fmt.parseInt(u16, service_span, 10) catch 0;
         }
-        if (common.evaluate_net_access(node, port) == common.DECISION_DENY) {
+        if (common.evaluate_net_access(node, port, 0, 0) == common.DECISION_DENY) {
             return -1; // UV error codes are negative
         }
     }
@@ -122,12 +169,12 @@ export fn connect(sockfd: c_int, addr: *const c.sockaddr, addrlen: c.socklen_t) 
     const ip_slice = std.mem.sliceTo(&ip_buf, 0);
 
     if (port == 53) {
-        if (common.evaluate_net_access(ip_slice.ptr, port) == common.DECISION_DENY) {
+        if (common.evaluate_net_access(ip_slice.ptr, port, 0, 0) == common.DECISION_DENY) {
             common.__errno().* = 13;
             return -1;
         }
     } else if (port != 0) {
-        if (common.evaluate_net_access(ip_slice.ptr, port) == common.DECISION_DENY) {
+        if (common.evaluate_net_access(ip_slice.ptr, port, 0, 0) == common.DECISION_DENY) {
             common.__errno().* = 13; // EACCES
             return -1;
         }
@@ -159,12 +206,12 @@ export fn sendto(sockfd: c_int, buf: ?*const anyopaque, len: usize, flags: c_int
         const ip_slice = std.mem.sliceTo(&ip_buf, 0);
 
         if (port == 53) {
-            if (common.evaluate_net_access(ip_slice.ptr, port) == common.DECISION_DENY) {
+            if (common.evaluate_net_access(ip_slice.ptr, port, 0, 17) == common.DECISION_DENY) { // UDP = 17
                 common.__errno().* = 13;
                 return -1;
             }
         } else if (port != 0) {
-            if (common.evaluate_net_access(ip_slice.ptr, port) == common.DECISION_DENY) {
+            if (common.evaluate_net_access(ip_slice.ptr, port, 0, 17) == common.DECISION_DENY) {
                 common.__errno().* = 13; // EACCES
                 return -1;
             }

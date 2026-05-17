@@ -2,12 +2,13 @@
 fs = ["read:astraea.toml", "read:docs/plans/plan.md", "read:tests/**", "read:/etc/nsswitch.conf", "read:/etc/resolv.conf"]
 native_addons = ["*.node"] # Root is allowed to load any addon by default
 network = [
-    "allow:api.github.com:80", 
-    "allow:api.github.com:443", 
-    "allow:*.github.com:*",
-    "allow:127.0.0.1:53",      # Local DNS
-    "allow:8.8.8.8:53",        # Google DNS
-    "allow:8.8.4.4:53"
+    "connect:tcp:api.github.com:80", 
+    "connect:tcp:api.github.com:443", 
+    "connect:tcp:*.github.com:*",
+    "connect:udp:127.0.0.1:53",      # Local DNS
+    "connect:udp:8.8.8.8:53",        # Google DNS
+    "connect:udp:8.8.4.4:53",
+    "bind:tcp:127.0.0.1:8080-8090"
 ]
 
 [packages.restricted_package]
