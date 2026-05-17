@@ -1,0 +1,8 @@
+[packages.root]
+fs = ["read:astraea.toml", "read:docs/plans/plan.md", "read:tests/**"]
+
+[packages.eval]
+fs = ["read:plan.md"]
+
+[spoofs]
+"secret.txt" = "THIS IS MOCKED DATA BY ASTRAEA"

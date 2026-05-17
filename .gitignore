@@ -1,0 +1,31 @@
+# Zig
+.zig-cache/
+zig-cache/
+zig-out/
+*.o
+
+# Rust
+engine/target/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Astraea Artifacts
+.astraea_spoof_*
+libastraea.so
+test_v8.*
+*.rs.bak
+*.err
+*.log
+
+# OS/IDEs
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Etc
+# docs/ allowed
