@@ -6,6 +6,7 @@ comptime {
     _ = @import("fs.zig");
     _ = @import("net.zig");
     _ = @import("dlfcn.zig");
+    _ = @import("proc.zig");
 }
 
 pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, _: ?usize) noreturn {

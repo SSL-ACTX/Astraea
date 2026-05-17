@@ -10,6 +10,11 @@ network = [
     "allow:8.8.4.4:53"
 ]
 
+[packages.restricted_package]
+fs = ["read:**"]
+env = ["SAFE_VAR"]
+proc = ["/data/data/com.termux/files/usr/bin/whoami"]
+
 [packages.eval]
 fs = ["read:plan.md"]
 

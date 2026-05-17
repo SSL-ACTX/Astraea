@@ -13,11 +13,13 @@ mod attribution;
 mod fs;
 mod guardian;
 mod net;
+mod proc_env;
 mod v8;
 
 use attribution::*;
 use fs::FsManager;
 use net::NetManager;
+use proc_env::ProcEnvManager;
 
 // --- Global Context & Guards ---
 thread_local! {
@@ -50,6 +52,10 @@ pub struct PackagePolicy {
     pub native_addons: Vec<String>,
     #[serde(default)]
     pub network: Vec<String>,
+    #[serde(default)]
+    pub env: Vec<String>,
+    #[serde(default)]
+    pub proc: Vec<String>,
 }
 
 // --- Global State ---
@@ -57,6 +63,7 @@ pub struct PackagePolicy {
 struct AstraeaEngine {
     fs: FsManager,
     net: NetManager,
+    proc_env: ProcEnvManager,
     native_addon_rules: HashMap<String, Vec<String>>,
     seccomp: SeccompConfig,
 }
@@ -76,12 +83,12 @@ static ENGINE: Lazy<AstraeaEngine> = Lazy::new(|| {
 
     AstraeaEngine {
         fs: FsManager::new(manifest.packages.clone(), manifest.spoofs),
-        net: NetManager::new(manifest.packages),
+        net: NetManager::new(manifest.packages.clone()),
+        proc_env: ProcEnvManager::new(manifest.packages),
         native_addon_rules,
         seccomp: manifest.seccomp,
     }
 });
-
 // --- FFI Interface ---
 
 #[no_mangle]
@@ -106,6 +113,7 @@ pub extern "C" fn init_engine() {
     guardian::apply_policy(&engine.seccomp);
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
+
     info!("Astraea engine ready.");
 }
 
@@ -269,6 +277,74 @@ pub unsafe extern "C" fn evaluate_net_access(host: *const c_char, port: u16) -> 
 
     let package = get_current_package();
     let allowed = ENGINE.net.is_allowed(&package, host_str, port);
+
+    IN_ASTRAEA_HOOK.with(|h| h.set(false));
+    if allowed {
+        DECISION_ALLOW
+    } else {
+        DECISION_DENY
+    }
+}
+
+/// Evaluates whether an environment variable modification should be allowed.
+///
+/// # Safety
+///
+/// The `key` pointer must be a valid, null-terminated C string.
+#[no_mangle]
+pub unsafe extern "C" fn evaluate_env_access(key: *const c_char) -> i32 {
+    if key.is_null() {
+        return DECISION_ALLOW;
+    }
+    if IN_ASTRAEA_HOOK.with(|h| h.get()) {
+        return DECISION_ALLOW;
+    }
+    IN_ASTRAEA_HOOK.with(|h| h.set(true));
+
+    let key_str = match CStr::from_ptr(key).to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            IN_ASTRAEA_HOOK.with(|h| h.set(false));
+            return DECISION_DENY;
+        }
+    };
+
+    let package = get_current_package();
+    let allowed = ENGINE.proc_env.is_env_allowed(&package, key_str);
+
+    IN_ASTRAEA_HOOK.with(|h| h.set(false));
+    if allowed {
+        DECISION_ALLOW
+    } else {
+        DECISION_DENY
+    }
+}
+
+/// Evaluates whether a process execution should be allowed.
+///
+/// # Safety
+///
+/// The `binary` pointer must be a valid, null-terminated C string.
+#[no_mangle]
+pub unsafe extern "C" fn evaluate_proc_access(binary: *const c_char) -> i32 {
+    if binary.is_null() {
+        return DECISION_ALLOW;
+    }
+    if IN_ASTRAEA_HOOK.with(|h| h.get()) {
+        return DECISION_ALLOW;
+    }
+    IN_ASTRAEA_HOOK.with(|h| h.set(true));
+
+    let binary_str = match CStr::from_ptr(binary).to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            IN_ASTRAEA_HOOK.with(|h| h.set(false));
+            return DECISION_DENY;
+        }
+    };
+
+    let package = get_current_package();
+    let allowed = ENGINE.proc_env.is_proc_allowed(&package, binary_str);
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
     if allowed {

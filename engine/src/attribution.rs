@@ -17,8 +17,14 @@ fn get_string_into(isolate: *mut c_void, string_handle: *mut c_void, out: &mut S
     if string_handle.is_null() {
         return false;
     }
+
+    let v8 = match V8.as_ref() {
+        Some(v) => v,
+        None => return false,
+    };
+
     unsafe {
-        let len = v8_string_utf8_length(string_handle, isolate);
+        let len = (v8.string_utf8_length)(string_handle, isolate);
         if len == 0 {
             out.clear();
             return true;
@@ -30,7 +36,7 @@ fn get_string_into(isolate: *mut c_void, string_handle: *mut c_void, out: &mut S
                 buf.reserve((len + 1) - capacity);
             }
             buf.resize(len + 1, 0);
-            v8_string_write_utf8(
+            (v8.string_write_utf8)(
                 string_handle,
                 isolate,
                 buf.as_mut_ptr() as *mut c_char,
@@ -55,7 +61,7 @@ pub fn extract_package_name(path: &str) -> &str {
     }
 
     // Explicitly handle [eval] which Node uses for -e code
-    if path == "[eval]" || path.contains("eval") {
+    if path == "[eval]" {
         return "eval";
     }
 
@@ -84,34 +90,38 @@ pub fn extract_package_name(path: &str) -> &str {
 
 pub fn get_current_package() -> String {
     let mut js_origin_local = String::with_capacity(128);
-    let isolate = unsafe { v8_isolate_try_get_current() };
 
-    if !isolate.is_null() {
-        unsafe {
-            let mut handle_scope = [0u64; 4];
-            v8_handle_scope_ctor(handle_scope.as_mut_ptr() as *mut c_void, isolate);
-            let stack_handle = v8_stack_trace_current(isolate, 10, 0);
-            if !stack_handle.is_null() {
-                let frame_count = v8_stack_trace_get_frame_count(stack_handle);
-                for i in 0..frame_count {
-                    let frame_handle = v8_stack_trace_get_frame(stack_handle, isolate, i as u32);
-                    if !frame_handle.is_null() {
-                        let script_name_handle = v8_stack_frame_get_script_name(frame_handle);
-                        if get_string_into(isolate, script_name_handle, &mut js_origin_local)
-                            && !js_origin_local.is_empty()
-                            && !js_origin_local.starts_with("node:")
-                            && !js_origin_local.starts_with("internal/")
-                        {
-                            break;
+    if let Some(v8) = V8.as_ref() {
+        let isolate = unsafe { (v8.isolate_try_get_current)() };
+
+        if !isolate.is_null() {
+            unsafe {
+                let mut handle_scope = [0u64; 4];
+                (v8.handle_scope_ctor)(handle_scope.as_mut_ptr() as *mut c_void, isolate);
+                let stack_handle = (v8.stack_trace_current)(isolate, 10, 0);
+                if !stack_handle.is_null() {
+                    let frame_count = (v8.stack_trace_get_frame_count)(stack_handle);
+                    for i in 0..frame_count {
+                        let frame_handle =
+                            (v8.stack_trace_get_frame)(stack_handle, isolate, i as u32);
+                        if !frame_handle.is_null() {
+                            let script_name_handle = (v8.stack_frame_get_script_name)(frame_handle);
+                            if get_string_into(isolate, script_name_handle, &mut js_origin_local)
+                                && !js_origin_local.is_empty()
+                                && !js_origin_local.starts_with("node:")
+                                && !js_origin_local.starts_with("internal/")
+                            {
+                                break;
+                            }
                         }
                     }
                 }
+                (v8.handle_scope_dtor)(handle_scope.as_mut_ptr() as *mut c_void);
             }
-            v8_handle_scope_dtor(handle_scope.as_mut_ptr() as *mut c_void);
-        }
-        if !js_origin_local.is_empty() {
-            if let Ok(mut sticky) = LAST_USER_CONTEXT.write() {
-                *sticky = js_origin_local.clone();
+            if !js_origin_local.is_empty() {
+                if let Ok(mut sticky) = LAST_USER_CONTEXT.write() {
+                    *sticky = js_origin_local.clone();
+                }
             }
         }
     }
