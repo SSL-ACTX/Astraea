@@ -12,27 +12,33 @@ pub fn build(b: *std.Build) void {
     cargo_cmd.setCwd(b.path("engine"));
 
     // Compile the Interceptor Object (Zig C-ABI Layer).
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("interceptor/src/c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const obj = b.addObject(.{
         .name = "interceptor",
         .root_module = b.createModule(.{
             .root_source_file = b.path("interceptor/src/main.zig"),
             .target = target,
             .optimize = optimize,
-            .link_libc = true,
             .pic = true, // Force PIC for shared library compatibility
         }),
     });
+
+    obj.root_module.addImport("c", translate_c.createModule());
 
     // Platform detection
     const is_android = target.result.abi == .android or target.result.abi == .androideabi;
 
     if (is_android) {
-        obj.root_module.addCMacro("_Nullable", "");
-        obj.root_module.addCMacro("_Nonnull", "");
-        obj.root_module.addCMacro("__BIONIC_COMPLICATED_NULLNESS", "");
-        obj.root_module.addCMacro("BIONIC_IOCTL_NO_SIGNEDNESS_OVERLOAD", "");
-        obj.root_module.addIncludePath(.{ .cwd_relative = "/data/data/com.termux/files/usr/include" });
+        translate_c.addIncludePath(.{ .cwd_relative = "/data/data/com.termux/files/usr/include" });
         const arch_name = if (target.result.cpu.arch == .aarch64) "aarch64-linux-android" else "arm-linux-androideabi";
+        translate_c.addIncludePath(.{ .cwd_relative = b.fmt("/data/data/com.termux/files/usr/include/{s}", .{arch_name}) });
+
+        obj.root_module.addIncludePath(.{ .cwd_relative = "/data/data/com.termux/files/usr/include" });
         obj.root_module.addIncludePath(.{ .cwd_relative = b.fmt("/data/data/com.termux/files/usr/include/{s}", .{arch_name}) });
     }
 

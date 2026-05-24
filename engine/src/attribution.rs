@@ -98,9 +98,24 @@ pub fn get_current_package() -> String {
             unsafe {
                 let mut handle_scope = [0u64; 4];
                 (v8.handle_scope_ctor)(handle_scope.as_mut_ptr() as *mut c_void, isolate);
-                let stack_handle = (v8.stack_trace_current)(isolate, 10, 0);
+                let stack_handle = (v8.stack_trace_current)(isolate, 50, 0);
                 if !stack_handle.is_null() {
                     let frame_count = (v8.stack_trace_get_frame_count)(stack_handle);
+
+                    // Stack Anomaly Detection: Monitor for unusual stack depths
+                    if frame_count >= 50 {
+                        tracing::warn!(
+                            "STACK ANOMALY: Unusual stack depth detected: {}",
+                            frame_count
+                        );
+                        crate::log_event(
+                            "root",
+                            "stack_anomaly",
+                            &format!("depth:{}", frame_count),
+                            true,
+                        );
+                    }
+
                     for i in 0..frame_count {
                         let frame_handle =
                             (v8.stack_trace_get_frame)(stack_handle, isolate, i as u32);

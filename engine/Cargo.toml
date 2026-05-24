@@ -7,7 +7,7 @@ license = "AGPL-3.0-only"
 
 [lib]
 name = "engine"
-crate-type = ["staticlib"]
+crate-type = ["rlib", "staticlib"]
 
 [[bin]]
 name = "astraea-gen"

@@ -10,18 +10,17 @@ use tracing_subscriber::FmtSubscriber;
 
 // Modules
 mod attribution;
-mod audit;
+pub mod audit;
+pub mod evaluator;
 mod fs;
 mod guardian;
+pub mod ipc;
 mod net;
 mod proc_env;
 mod v8;
 
 use attribution::*;
 use audit::{AuditEvent, AuditLogger};
-use fs::FsManager;
-use net::NetManager;
-use proc_env::ProcEnvManager;
 
 // --- Global Context & Guards ---
 thread_local! {
@@ -40,7 +39,7 @@ pub struct Manifest {
     pub seccomp: SeccompConfig,
 }
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug, Default, Clone)]
 pub struct SeccompConfig {
     #[serde(default)]
     pub allowed_syscalls: Vec<String>,
@@ -62,40 +61,59 @@ pub struct PackagePolicy {
 
 // --- Global State ---
 
+use evaluator::local::LocalEvaluator;
+use evaluator::remote::RemoteEvaluator;
+use evaluator::Evaluator;
+
 struct AstraeaEngine {
-    fs: FsManager,
-    net: NetManager,
-    proc_env: ProcEnvManager,
-    native_addon_rules: HashMap<String, Vec<String>>,
+    evaluator: Box<dyn Evaluator>,
     seccomp: SeccompConfig,
     audit: Option<AuditLogger>,
 }
 
 static ENGINE: Lazy<AstraeaEngine> = Lazy::new(|| {
-    let manifest_str = std::fs::read_to_string("astraea.toml").unwrap_or_else(|_| String::new());
-    let manifest: Manifest = toml::from_str(&manifest_str).unwrap_or(Manifest {
-        packages: HashMap::new(),
-        spoofs: HashMap::new(),
-        seccomp: SeccompConfig::default(),
-    });
-
-    let mut native_addon_rules = HashMap::new();
-    for (name, policy) in &manifest.packages {
-        native_addon_rules.insert(name.clone(), policy.native_addons.clone());
-    }
-
     let audit_path = std::env::var("ASTRAEA_AUDIT").ok();
-    let audit = audit_path.and_then(|p| AuditLogger::new(&p));
+    let telemetry_path = std::env::var("ASTRAEA_TELEMETRY").ok();
 
-    AstraeaEngine {
-        fs: FsManager::new(manifest.packages.clone(), manifest.spoofs),
-        net: NetManager::new(manifest.packages.clone()),
-        proc_env: ProcEnvManager::new(manifest.packages),
-        native_addon_rules,
-        seccomp: manifest.seccomp,
-        audit,
+    let audit = if let Some(path) = telemetry_path {
+        Some(AuditLogger::new(audit::AuditSink::Uds(path)))
+    } else if let Some(path) = audit_path {
+        Some(AuditLogger::new(audit::AuditSink::File(path)))
+    } else {
+        None
+    };
+
+    if std::env::var("ASTRAEA_DAEMON").is_ok() {
+        let socket_path = std::env::temp_dir().join("astraea.sock");
+        let evaluator = Box::new(RemoteEvaluator::new(socket_path.to_str().unwrap()));
+        info!("Astraea Engine: Operating in REMOTE (Daemon) mode.");
+
+        AstraeaEngine {
+            evaluator,
+            seccomp: SeccompConfig::default(), // Seccomp usually managed by daemon or skipped in remote
+            audit,
+        }
+    } else {
+        let manifest_str =
+            std::fs::read_to_string("astraea.toml").unwrap_or_else(|_| String::new());
+        let manifest: Manifest = toml::from_str(&manifest_str).unwrap_or(Manifest {
+            packages: HashMap::new(),
+            spoofs: HashMap::new(),
+            seccomp: SeccompConfig::default(),
+        });
+
+        let seccomp = manifest.seccomp.clone();
+        let evaluator = Box::new(LocalEvaluator::new(manifest, None)); // Audit handled by engine
+        info!("Astraea Engine: Operating in LOCAL (Standalone) mode.");
+
+        AstraeaEngine {
+            evaluator,
+            seccomp,
+            audit,
+        }
     }
 });
+
 // --- FFI Interface ---
 
 #[no_mangle]
@@ -117,17 +135,19 @@ pub extern "C" fn init_engine() {
 
     // Trigger Lazy initialization
     let engine = &*ENGINE;
-    guardian::apply_policy(&engine.seccomp);
+    if std::env::var("ASTRAEA_DAEMON").is_err() {
+        guardian::apply_policy(&engine.seccomp);
+    }
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
 
     info!("Astraea engine ready.");
 }
 
-fn log_event(package: String, action: &str, target: &str, allowed: bool) {
+fn log_event(package: &str, action: &str, target: &str, allowed: bool) {
     if let Some(audit) = &ENGINE.audit {
         audit.log(AuditEvent {
-            package,
+            package: package.to_string(),
             action: action.to_string(),
             target: target.to_string(),
             allowed,
@@ -169,11 +189,6 @@ const DECISION_DENY: i32 = 0;
 const DECISION_ALLOW: i32 = 1;
 const DECISION_SPOOF: i32 = 2;
 
-/// Primary entry point for filesystem capability evaluation.
-///
-/// # Safety
-///
-/// The `path` pointer must be a valid, null-terminated C string.
 #[no_mangle]
 pub unsafe extern "C" fn evaluate_fs_access(
     path: *const c_char,
@@ -200,20 +215,18 @@ pub unsafe extern "C" fn evaluate_fs_access(
         };
 
         let package = get_current_package();
+        let (decision, redirect_path) = ENGINE.evaluator.evaluate_fs(&package, path_str);
 
-        if let Some(spoof_path) = ENGINE.fs.get_spoof(path_str) {
-            info!(target: "astraea", "SPOOF: package '{}' -> '{}' (redirected to mock)", package, path_str);
-            log_event(package, "fs", &format!("spoof:{}", path_str), true);
-            return (DECISION_SPOOF, Some(spoof_path));
-        }
-
-        if ENGINE.fs.is_allowed(&package, path_str) {
-            log_event(package, "fs", &format!("read:{}", path_str), true);
-            (DECISION_ALLOW, None)
+        if decision == DECISION_SPOOF {
+            log_event(&package, "fs", &format!("spoof:{}", path_str), true);
         } else {
-            log_event(package, "fs", &format!("read:{}", path_str), false);
-            (DECISION_DENY, None)
+            let allowed = decision == DECISION_ALLOW;
+            log_event(&package, "fs", &format!("read:{}", path_str), allowed);
+            if !allowed {
+                warn!(target: "astraea", "DENY FS: package '{}' -> '{}'", package, path_str);
+            }
         }
+        (decision, redirect_path)
     })();
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
@@ -250,31 +263,18 @@ pub unsafe extern "C" fn evaluate_dlopen(path: *const c_char) -> i32 {
     };
 
     let package = get_current_package();
-    let is_addon = path_str.ends_with(".node");
+    let decision = ENGINE.evaluator.evaluate_dlopen(&package, path_str);
+    let allowed = decision == DECISION_ALLOW;
 
-    let allowed = if !is_addon {
-        true
-    } else if let Some(allowed_addons) = ENGINE.native_addon_rules.get(&package) {
-        allowed_addons
-            .iter()
-            .any(|a| path_str.ends_with(a) || (a == "*.node"))
-    } else {
-        package == "root"
-    };
-
-    if is_addon {
-        log_event(package.clone(), "native_addons", path_str, allowed);
+    if path_str.ends_with(".node") {
+        log_event(&package, "native_addons", path_str, allowed);
+        if !allowed {
+            warn!(target: "astraea", "DENY DLOPEN: package '{}' -> '{}'", package, path_str);
+        }
     }
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
-
-    if !allowed {
-        warn!(target: "astraea", "DENY DLOPEN: package '{}' -> '{}' (unauthorized native addon)", package, path_str);
-        DECISION_DENY
-    } else {
-        debug!(target: "astraea", "ALLOW DLOPEN: package '{}' -> '{}'", package, path_str);
-        DECISION_ALLOW
-    }
+    decision
 }
 
 /// Evaluates whether a network connection should be allowed.
@@ -306,9 +306,10 @@ pub unsafe extern "C" fn evaluate_net_access(
     };
 
     let package = get_current_package();
-    let allowed = ENGINE
-        .net
-        .is_allowed(&package, host_str, port, action, protocol);
+    let decision = ENGINE
+        .evaluator
+        .evaluate_net(&package, host_str, port, action, protocol);
+    let allowed = decision == DECISION_ALLOW;
 
     let action_str = match action {
         1 => "bind",
@@ -322,18 +323,18 @@ pub unsafe extern "C" fn evaluate_net_access(
     };
 
     log_event(
-        package,
+        &package,
         "network",
         &format!("{}:{}:{}:{}", action_str, proto_str, host_str, port),
         allowed,
     );
 
-    IN_ASTRAEA_HOOK.with(|h| h.set(false));
-    if allowed {
-        DECISION_ALLOW
-    } else {
-        DECISION_DENY
+    if !allowed {
+        warn!(target: "astraea", "DENY NET: package '{}' -> '{}:{}' ({}/{})", package, host_str, port, action_str, proto_str);
     }
+
+    IN_ASTRAEA_HOOK.with(|h| h.set(false));
+    decision
 }
 
 /// Evaluates whether an environment variable modification should be allowed.
@@ -360,16 +361,16 @@ pub unsafe extern "C" fn evaluate_env_access(key: *const c_char) -> i32 {
     };
 
     let package = get_current_package();
-    let allowed = ENGINE.proc_env.is_env_allowed(&package, key_str);
+    let decision = ENGINE.evaluator.evaluate_env(&package, key_str);
+    let allowed = decision == DECISION_ALLOW;
 
-    log_event(package, "env", key_str, allowed);
+    log_event(&package, "env", key_str, allowed);
+    if !allowed {
+        warn!(target: "astraea", "DENY ENV: package '{}' -> '{}'", package, key_str);
+    }
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
-    if allowed {
-        DECISION_ALLOW
-    } else {
-        DECISION_DENY
-    }
+    decision
 }
 
 /// Evaluates whether a process execution should be allowed.
@@ -396,16 +397,16 @@ pub unsafe extern "C" fn evaluate_proc_access(binary: *const c_char) -> i32 {
     };
 
     let package = get_current_package();
-    let allowed = ENGINE.proc_env.is_proc_allowed(&package, binary_str);
+    let decision = ENGINE.evaluator.evaluate_proc(&package, binary_str);
+    let allowed = decision == DECISION_ALLOW;
 
-    log_event(package, "proc", binary_str, allowed);
+    log_event(&package, "proc", binary_str, allowed);
+    if !allowed {
+        warn!(target: "astraea", "DENY PROC: package '{}' -> '{}'", package, binary_str);
+    }
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));
-    if allowed {
-        DECISION_ALLOW
-    } else {
-        DECISION_DENY
-    }
+    decision
 }
 
 /// Registers the result of a successful DNS resolution in the local cache.
@@ -425,8 +426,7 @@ pub unsafe extern "C" fn register_dns_result(domain: *const c_char, ip: *const c
 
     if let (Ok(d), Ok(i)) = (CStr::from_ptr(domain).to_str(), CStr::from_ptr(ip).to_str()) {
         let package = get_current_package();
-        debug!(target: "astraea", "DNS CACHE: package '{}' resolved '{}' -> '{}'", package, d, i);
-        ENGINE.net.register_dns(&package, d, vec![i.to_string()]);
+        ENGINE.evaluator.register_dns(&package, d, i);
     }
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));

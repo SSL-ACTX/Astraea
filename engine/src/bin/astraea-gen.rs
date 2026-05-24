@@ -43,28 +43,26 @@ fn main() {
 
     let mut packages: BTreeMap<String, PackagePolicy> = BTreeMap::new();
 
-    for line in reader.lines() {
-        if let Ok(line_str) = line {
-            if let Ok(event) = serde_json::from_str::<AuditEvent>(&line_str) {
-                let policy = packages.entry(event.package).or_default();
-                match event.action.as_str() {
-                    "fs" => {
-                        policy.fs.insert(event.target);
-                    }
-                    "native_addons" => {
-                        policy.native_addons.insert(event.target);
-                    }
-                    "network" => {
-                        policy.network.insert(event.target);
-                    }
-                    "env" => {
-                        policy.env.insert(event.target);
-                    }
-                    "proc" => {
-                        policy.proc.insert(event.target);
-                    }
-                    _ => {}
+    for line_str in reader.lines().map_while(Result::ok) {
+        if let Ok(event) = serde_json::from_str::<AuditEvent>(&line_str) {
+            let policy = packages.entry(event.package).or_default();
+            match event.action.as_str() {
+                "fs" => {
+                    policy.fs.insert(event.target);
                 }
+                "native_addons" => {
+                    policy.native_addons.insert(event.target);
+                }
+                "network" => {
+                    policy.network.insert(event.target);
+                }
+                "env" => {
+                    policy.env.insert(event.target);
+                }
+                "proc" => {
+                    policy.proc.insert(event.target);
+                }
+                _ => {}
             }
         }
     }

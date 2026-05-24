@@ -295,7 +295,7 @@ pub fn apply_policy(config: &SeccompConfig) {
         allowed_nrs.push(SYS_eventfd as usize);
     }
 
-    // Manual additions for aarch64 which might be missing from libc but present in strace
+    // Manual additions for aarch64 which might be missing from libc or have different numbers
     #[cfg(target_arch = "aarch64")]
     {
         allowed_nrs.push(79); // newfstatat
@@ -340,7 +340,6 @@ pub fn apply_policy(config: &SeccompConfig) {
         allowed_nrs.push(93); // exit
         allowed_nrs.push(94); // exit_group
         allowed_nrs.push(98); // futex
-        allowed_nrs.push(220); // clone3
         allowed_nrs.push(160); // uname
         allowed_nrs.push(29); // ioctl
         allowed_nrs.push(63); // read
@@ -350,10 +349,17 @@ pub fn apply_policy(config: &SeccompConfig) {
         allowed_nrs.push(131); // tgkill
         allowed_nrs.push(261); // prlimit64
         allowed_nrs.push(278); // getrandom
-        allowed_nrs.push(117); // epoll_ctl
-        allowed_nrs.push(118); // epoll_pwait
-        allowed_nrs.push(221); // execve
-        allowed_nrs.push(220); // clone3
+
+        // Corrected numbers for aarch64
+        allowed_nrs.push(158); // getgroups (corrected)
+        allowed_nrs.push(159); // setgroups (corrected)
+        allowed_nrs.push(147); // getresuid (corrected)
+        allowed_nrs.push(148); // setresuid
+        allowed_nrs.push(149); // getresgid (corrected)
+        allowed_nrs.push(150); // setresgid
+        allowed_nrs.push(154); // setpgid
+        allowed_nrs.push(155); // getpgid
+        allowed_nrs.push(157); // getsid
     }
 
     for name in &config.allowed_syscalls {
@@ -378,9 +384,9 @@ pub fn apply_policy(config: &SeccompConfig) {
         filter.push(bpf_stmt!(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
     }
 
-    // Safety net: Allow certain 'safe' informational syscalls to prevent teardown crashes.
-    // This includes common process and thread management that varies by Android version.
-    filter.push(bpf_stmt!(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
+    // Security Enforcement: Kill the process (or error) if a syscall is not whitelisted.
+    // We use SECCOMP_RET_TRAP to catch the violation and log it with attribution.
+    filter.push(bpf_stmt!(BPF_RET | BPF_K, libc::SECCOMP_RET_TRAP));
 
     let prog = sock_fprog {
         len: filter.len() as u16,
@@ -388,6 +394,8 @@ pub fn apply_policy(config: &SeccompConfig) {
     };
 
     unsafe {
+        setup_sigsys_handler();
+
         if prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
             error!("Guardian: Failed to set PR_SET_NO_NEW_PRIVS");
             return;
@@ -407,5 +415,55 @@ pub fn apply_policy(config: &SeccompConfig) {
                 allowed_nrs.len()
             );
         }
+    }
+}
+
+#[repr(C)]
+#[allow(non_camel_case_types)]
+struct siginfo_t_sigsys {
+    si_signo: i32,
+    si_errno: i32,
+    si_code: i32,
+    _pad: i32,
+    si_call_addr: *mut c_void,
+    si_syscall: i32,
+    si_arch: u32,
+}
+
+extern "C" fn sigsys_handler(sig: i32, info: *mut siginfo_t, _ucontext: *mut c_void) {
+    if sig != SIGSYS {
+        return;
+    }
+
+    let info_ptr = info as *const siginfo_t_sigsys;
+    let info_sigsys = unsafe { &*info_ptr };
+    let syscall_nr = info_sigsys.si_syscall;
+    let arch = info_sigsys.si_arch;
+
+    let package = crate::attribution::get_current_package();
+    error!(
+        "SECCOMP VIOLATION: package '{}' attempted blocked syscall {} (arch: 0x{:x})",
+        package, syscall_nr, arch
+    );
+
+    crate::log_event(
+        &package,
+        "seccomp_violation",
+        &format!("syscall:{}", syscall_nr),
+        false,
+    );
+
+    // After logging, we must exit or the process will just retry the syscall and loop forever.
+    unsafe {
+        libc::_exit(1);
+    }
+}
+
+unsafe fn setup_sigsys_handler() {
+    let mut sa: sigaction = std::mem::zeroed();
+    sa.sa_sigaction = sigsys_handler as *const () as usize;
+    sa.sa_flags = SA_SIGINFO | SA_NODEFER;
+    if sigaction(SIGSYS, &sa, std::ptr::null_mut()) != 0 {
+        error!("Guardian: Failed to setup SIGSYS handler");
     }
 }

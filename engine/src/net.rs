@@ -84,8 +84,8 @@ impl NetManager {
                 // Support old syntax "allow:host:port" as connect:*:host:port
                 let parts: Vec<&str> = rule_str.split(':').collect();
 
-                let mut action_str = "";
-                let mut protocol_str = "";
+                let action_str;
+                let protocol_str;
                 let host_str;
                 let port_str;
 

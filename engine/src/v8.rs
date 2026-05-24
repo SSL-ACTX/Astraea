@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use libc::{c_char, c_int, c_void};
 use once_cell::sync::Lazy;
 

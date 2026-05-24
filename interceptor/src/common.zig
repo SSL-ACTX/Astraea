@@ -1,15 +1,6 @@
 const std = @import("std");
 
-pub const c = @cImport({
-    @cInclude("uv.h");
-    @cInclude("dlfcn.h");
-    @cInclude("fcntl.h");
-    @cInclude("sys/stat.h");
-    @cInclude("sys/socket.h");
-    @cInclude("netdb.h");
-    @cInclude("arpa/inet.h");
-    @cInclude("netinet/in.h");
-});
+pub const c = @import("c");
 
 pub const EvaluationResult = extern struct {
     decision: i32,
@@ -33,14 +24,20 @@ pub const LOG_DEBUG: i32 = 3;
 
 pub fn log_info(comptime fmt: []const u8, args: anytype) void {
     var buf: [512]u8 = undefined;
-    const msg = std.fmt.bufPrintZ(&buf, fmt, args) catch return;
-    astraea_log(LOG_INFO, msg.ptr);
+    const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
+    if (msg.len < buf.len) {
+        buf[msg.len] = 0;
+        astraea_log(LOG_INFO, @ptrCast(buf[0..msg.len].ptr));
+    }
 }
 
 pub fn log_warn(comptime fmt: []const u8, args: anytype) void {
     var buf: [512]u8 = undefined;
-    const msg = std.fmt.bufPrintZ(&buf, fmt, args) catch return;
-    astraea_log(LOG_WARN, msg.ptr);
+    const msg = std.fmt.bufPrint(&buf, fmt, args) catch return;
+    if (msg.len < buf.len) {
+        buf[msg.len] = 0;
+        astraea_log(LOG_WARN, @ptrCast(buf[0..msg.len].ptr));
+    }
 }
 
 pub const RTLD_NEXT = @as(?*anyopaque, @ptrFromInt(@as(usize, @bitCast(@as(isize, -1)))));
