@@ -25,6 +25,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .pic = true, // Force PIC for shared library compatibility
+            .strip = true,
         }),
     });
 
@@ -58,8 +59,9 @@ pub fn build(b: *std.Build) void {
     link_cmd.addArg("-luv");
 
     // Optimization and stripping flags for the final shared library
+    link_cmd.addArg("-Wl,-s"); // Strip all symbols
+
     if (optimize != .Debug) {
-        link_cmd.addArg("-Wl,-s"); // Strip all symbols
         link_cmd.addArg("-Wl,--gc-sections"); // Dead code elimination
         link_cmd.addArg("-Wl,--exclude-libs,ALL"); // Hide statically linked symbols from dynamic table
     }
