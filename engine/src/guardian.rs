@@ -310,6 +310,7 @@ pub fn apply_policy(config: &SeccompConfig) {
         allowed_nrs.push(115); // epoll_create
         allowed_nrs.push(212); // recvmsg
         allowed_nrs.push(211); // sendmsg
+        allowed_nrs.push(210); // shutdown
         allowed_nrs.push(147); // getresuid
         allowed_nrs.push(149); // getresgid
         allowed_nrs.push(140); // setpriority
