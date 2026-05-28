@@ -9,12 +9,14 @@
 
 ## Key Features
 
-*   **Native Interception:** Hooks `libuv` and `libc` system calls (`open`, `connect`, `dlopen`, etc.) using dynamic linker hijacking.
+*   **Native Interception:** Hooks `libuv` and `libc` system calls (`open`, `connect`, `dlopen`, `execve`, etc.) using dynamic linker hijacking.
 *   **Context-Aware Attribution:** Automatically correlates native I/O and network requests back to the specific JavaScript module/package via V8 stack introspection.
-*   **Modular Security Mesh:** Cleanly separated architecture with dedicated managers for Filesystem, Networking, Attribution, and Kernel-level Hardening.
-*   **Robust Globset Matching:** High-performance, Regex-backed path matching via the `globset` crate, ensuring absolute path canonicalization.
-*   **Smart Network Enforcement:** Hybrid domain and CIDR-based filtering with a "Smart DNS Verifier" to solve the blind-IP problem on Android.
-*   **Seccomp-BPF Protection:** Kernel-level sandbox enforcing a strict syscall whitelist to prevent native bypasses and direct kernel escapes.
+*   **Modular Security Mesh:** Cleanly separated architecture with dedicated managers for Filesystem, Networking, Process/Environment, Attribution, and Kernel-level Hardening.
+*   **Globset Matching:** High-performance, Regex-backed path matching via the `globset` crate, ensuring absolute path canonicalization.
+*   **Smart Network Enforcement:** Hybrid domain and CIDR-based filtering with granular protocol and port range rules.
+*   **Seccomp-BPF Protection:** Kernel-level sandbox enforcing a strict syscall whitelist to prevent native bypasses, direct kernel escapes, and unhandled behaviors.
+*   **Process & Environment Control:** Restricts unauthorized processes from executing subprocesses or altering the environment.
+*   **Real-time Observability:** Built-in asynchronous audit logging and telemetry streaming with `astraea-daemon`.
 *   **Capability Spoofing:** Seamlessly redirects unauthorized access to synthetic mock data instead of failing.
 
 ---
@@ -26,19 +28,20 @@ Astraea leverages a modular architecture:
 1.  **The Interceptor (Zig):** A lightweight C-ABI wrapper that hijacks system calls and forwards context to the engine.
 2.  **The Engine (Rust):** The core orchestrator, featuring:
     *   **FsManager:** Manages robust glob-based filesystem capabilities.
-    *   **NetManager:** Handles CIDR-based networking and DNS-to-IP verification.
+    *   **NetManager:** Handles networking rules and socket bounds.
+    *   **ProcEnvManager:** Controls child processes and environment variables.
     *   **Attribution Engine:** Performs deep V8 stack introspection.
     *   **Guardian:** Generates and applies Seccomp-BPF filters.
+    *   **Audit/Telemetry:** Streams real-time enforcement logs.
 
 ---
 
-## Getting Started
-
+## Documentation
 
 Explore the technical specifications and research in the [`docs/`](docs/) directory:
 
-- [**Architectural Specification & Roadmap**](docs/plans/plan.md): Detailed overview of the O-Cap model, technical stack, and implementation phases.
-- [**Performance Analysis**](docs/benchmarks/PERFORMANCE.md): Formal benchmarking results and overhead breakdown for native interception and policy evaluation.
+- [**Architectural Specification & Roadmap**](docs/plans/astraea_architecture_specification.md): Detailed overview of the O-Cap model, technical stack, and implementation phases.
+- [**Performance Analysis**](docs/benchmarks/astraea_performance.md): Formal benchmarking results and overhead breakdown for native interception and policy evaluation.
 
 ---
 
@@ -46,7 +49,7 @@ Explore the technical specifications and research in the [`docs/`](docs/) direct
 
 ### Prerequisites
 
-*   **Zig** (0.13.0 or later)
+*   **Zig** (0.17.0 strictly required)
 *   **Rust** (1.75.0 or later)
 *   **Node.js**
 *   **Clang** (for final linking)
@@ -101,4 +104,4 @@ Astraea is designed for high-throughput environments. Current benchmarks show an
 
 ## Security Disclaimer
 
-Astraea is a security research project. While it provides strong protection at the `libuv` layer, it does not currently prevent direct `syscall` invocations if a malicious module loads its own native binary. Future versions will address this via Seccomp integration.
+Astraea is a security research project. It provides strong protection at the `libuv` layer and enforces a Linux `seccomp-bpf` filter to block unauthorized direct syscalls at the kernel level, mitigating bypasses via custom native addons. However, it should be heavily tested in staging environments prior to any production deployment.

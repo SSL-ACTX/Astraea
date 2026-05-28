@@ -1,6 +1,6 @@
 # Astraea Architectural Specification & Roadmap
 
-**Status:** Phase 5 (Finalized/Experimental)  
+**Status:** Phase 9 (Finalized/Experimental)  
 **Security Model:** Object-Capability (O-Cap) at C-ABI Boundary  
 **Technical Stack:** Rust (Engine), Zig (Interceptor), V8 (Introspection)
 
@@ -59,6 +59,22 @@ A high-performance policy evaluator designed for minimal impact on the Node.js e
 *   [x] **Seccomp-BPF Integration:** Strict syscall whitelist to prevent direct kernel escapes.
 *   [x] **dlopen Interception:** Granular control over native addon loading per package.
 *   [x] **Architecture Hardening:** Dedicated `guardian` module for low-level process security.
+
+### Phase 6: Network Capability Enforcement [COMPLETE]
+*   [x] Interception of `connect`, `sendto`, `recvfrom`, `bind`, `socket`.
+*   [x] Hybrid domain, explicit protocol, and port-range filtering.
+
+### Phase 7: Process & Environment Control [COMPLETE]
+*   [x] Hooks for `execve`, `posix_spawn`, and environment modification routines.
+*   [x] Dedicated `ProcEnvManager` in Rust for child process and environment capabilities.
+
+### Phase 8: Learning Mode (Auto-Manifest) [COMPLETE]
+*   [x] Asynchronous JSON audit logger logging blocked/allowed $(Package, Action, Target)$ tuples.
+*   [x] `astraea-gen` CLI tool to scaffold `astraea.toml` from audit logs.
+
+### Phase 9: Telemetry & Observability [COMPLETE]
+*   [x] Asynchronous event streaming and aggregation.
+*   [x] `astraea-daemon` with IPC for real-time remote evaluation and observability.
 
 ---
 
