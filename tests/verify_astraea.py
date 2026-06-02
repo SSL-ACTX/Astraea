@@ -80,9 +80,7 @@ def run_test(test_file, telemetry_socket):
         return False
 
 def main():
-    telemetry_socket = "/data/data/com.termux/files/home/.gemini/tmp/astraea/astraea.telemetry.sock"
-    # The daemon creates it at /data/data/com.termux/files/home/.gemini/tmp/astraea/astraea.telemetry.sock usually based on temp_dir
-    # But wait, our code uses std::env::temp_dir(). Let's find out where that is.
+    telemetry_socket = "/data/data/com.termux/files/usr/tmp/astraea.sock"
     temp_dir = os.environ.get("TMPDIR", "/tmp")
     telemetry_socket = os.path.join(temp_dir, "astraea.telemetry.sock")
     

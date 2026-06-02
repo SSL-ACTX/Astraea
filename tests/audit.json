@@ -1,0 +1,13 @@
+{"package":"root","action":"fs","target":"read:/data/data/com.termux/files/home/astraea/tests/audit.json","allowed":true}
+{"package":"root","action":"fs","target":"read:/data/data/com.termux/files/usr/etc/tls/openssl.cnf","allowed":true}
+{"package":"root","action":"fs","target":"read:/proc/self/stat","allowed":true}
+{"package":"root","action":"fs","target":"read:/proc/self/maps","allowed":true}
+{"package":"root","action":"fs","target":"read:/proc/self/cgroup","allowed":true}
+{"package":"root","action":"fs","target":"read:/sys/fs/cgroup/memory//memory.soft_limit_in_bytes","allowed":true}
+{"package":"root","action":"fs","target":"read:/sys/fs/cgroup/memory//memory.limit_in_bytes","allowed":true}
+{"package":"root","action":"fs","target":"read:/sys/fs/cgroup/memory/memory.soft_limit_in_bytes","allowed":true}
+{"package":"root","action":"fs","target":"read:/sys/fs/cgroup/memory/memory.limit_in_bytes","allowed":true}
+{"package":"root","action":"fs","target":"read:/proc/meminfo","allowed":true}
+{"package":"root","action":"fs","target":"read:/sys/devices/system/cpu/online","allowed":true}
+{"package":"eval","action":"fs","target":"read:astraea.toml","allowed":false}
+{"package":"eval","action":"env","target":"AUDIT_VAR","allowed":false}

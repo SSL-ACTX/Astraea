@@ -47,7 +47,7 @@ pub fn build(b: *std.Build) void {
     const rust_profile = if (optimize == .Debug) "debug" else "release";
     const rust_lib_path = b.path(b.fmt("engine/target/{s}/libengine.a", .{rust_profile}));
 
-    const output_dir = b.getInstallPath(.lib, "");
+    const output_dir = "zig-out/lib";
 
     const mkdir_cmd = b.addSystemCommand(&.{ "mkdir", "-p", output_dir });
 
