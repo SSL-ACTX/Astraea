@@ -2,6 +2,86 @@ const std = @import("std");
 const common = @import("common.zig");
 const c = common.c;
 
+extern fn malloc(size: usize) ?*anyopaque;
+extern fn free(ptr: ?*anyopaque) void;
+
+const Dl_info = extern struct {
+    dli_fname: [*c]const u8,
+    dli_fbase: ?*anyopaque,
+    dli_sname: [*c]const u8,
+    dli_saddr: ?*anyopaque,
+};
+extern fn dladdr(addr: ?*const anyopaque, info: *Dl_info) c_int;
+
+fn get_astraea_path() [*c]const u8 {
+    var info: Dl_info = undefined;
+    _ = dladdr(@ptrCast(&execve), &info);
+    return info.dli_fname;
+}
+
+fn inject_ld_preload(envp: [*c]const [*c]u8, astraea_path: [*c]const u8) [*c]const [*c]u8 {
+    var env_count: usize = 0;
+    if (envp != null) {
+        while (envp[env_count] != null) : (env_count += 1) {}
+    }
+
+    const new_envp_ptr = malloc((env_count + 2) * @sizeOf(?*anyopaque));
+    if (new_envp_ptr == null) return envp;
+    const new_envp: [*c][*c]const u8 = @ptrCast(@alignCast(new_envp_ptr));
+
+    var ld_preload_found = false;
+    var i: usize = 0;
+    var write_idx: usize = 0;
+    while (i < env_count) : (i += 1) {
+        const item = envp[i];
+        if (std.mem.startsWith(u8, std.mem.span(item), "LD_PRELOAD=")) {
+            ld_preload_found = true;
+            const new_item_ptr = malloc(12 + std.mem.span(astraea_path).len);
+            if (new_item_ptr != null) {
+                const new_item: [*]u8 = @ptrCast(new_item_ptr);
+                @memcpy(new_item[0..11], "LD_PRELOAD=");
+                @memcpy(new_item[11 .. 11 + std.mem.span(astraea_path).len], std.mem.span(astraea_path));
+                new_item[11 + std.mem.span(astraea_path).len] = 0;
+                new_envp[write_idx] = new_item;
+                write_idx += 1;
+            } else {
+                new_envp[write_idx] = item;
+                write_idx += 1;
+            }
+        } else {
+            new_envp[write_idx] = item;
+            write_idx += 1;
+        }
+    }
+
+    if (!ld_preload_found) {
+        const new_item_ptr = malloc(12 + std.mem.span(astraea_path).len);
+        if (new_item_ptr != null) {
+            const new_item: [*]u8 = @ptrCast(new_item_ptr);
+            @memcpy(new_item[0..11], "LD_PRELOAD=");
+            @memcpy(new_item[11 .. 11 + std.mem.span(astraea_path).len], std.mem.span(astraea_path));
+            new_item[11 + std.mem.span(astraea_path).len] = 0;
+            new_envp[write_idx] = new_item;
+            write_idx += 1;
+        }
+    }
+
+    new_envp[write_idx] = null;
+    return @ptrCast(new_envp);
+}
+
+fn free_injected_envp(original_envp: [*c]const [*c]u8, injected_envp: [*c]const [*c]u8) void {
+    if (injected_envp == original_envp) return;
+    var idx: usize = 0;
+    while (injected_envp[idx] != null) : (idx += 1) {
+        const item = injected_envp[idx];
+        if (std.mem.startsWith(u8, std.mem.span(item), "LD_PRELOAD=")) {
+            free(@ptrCast(@constCast(item)));
+        }
+    }
+    free(@ptrCast(@constCast(injected_envp)));
+}
+
 // --- Exec Hooks ---
 
 const execve_fn = *const fn (pathname: [*c]const u8, argv: [*c]const [*c]u8, envp: [*c]const [*c]u8) callconv(.c) c_int;
@@ -17,7 +97,11 @@ export fn execve(pathname: [*c]const u8, argv: [*c]const [*c]u8, envp: [*c]const
         }
     }
 
-    return if (real_execve) |func| func(pathname, argv, envp) else -1;
+    const astraea_path = get_astraea_path();
+    const new_envp = inject_ld_preload(envp, astraea_path);
+    const ret = if (real_execve) |func| func(pathname, argv, new_envp) else -1;
+    free_injected_envp(envp, new_envp);
+    return ret;
 }
 
 const execvp_fn = *const fn (file: [*c]const u8, argv: [*c]const [*c]u8) callconv(.c) c_int;
@@ -32,6 +116,10 @@ export fn execvp(file: [*c]const u8, argv: [*c]const [*c]u8) callconv(.c) c_int 
             return -1;
         }
     }
+
+    const astraea_path = get_astraea_path();
+    if (real_setenv == null) real_setenv = common.getRealSymbol(setenv_fn, "setenv");
+    if (real_setenv) |func| _ = func("LD_PRELOAD", astraea_path, 1);
 
     return if (real_execvp) |func| func(file, argv) else -1;
 }
@@ -49,6 +137,10 @@ export fn execv(pathname: [*c]const u8, argv: [*c]const [*c]u8) callconv(.c) c_i
         }
     }
 
+    const astraea_path = get_astraea_path();
+    if (real_setenv == null) real_setenv = common.getRealSymbol(setenv_fn, "setenv");
+    if (real_setenv) |func| _ = func("LD_PRELOAD", astraea_path, 1);
+
     return if (real_execv) |func| func(pathname, argv) else -1;
 }
 
@@ -64,7 +156,11 @@ export fn posix_spawn(pid: [*c]c.pid_t, path: [*c]const u8, file_actions: ?*anyo
         }
     }
 
-    return if (real_posix_spawn) |func| func(pid, path, file_actions, attrp, argv, envp) else -1;
+    const astraea_path = get_astraea_path();
+    const new_envp = inject_ld_preload(envp, astraea_path);
+    const ret = if (real_posix_spawn) |func| func(pid, path, file_actions, attrp, argv, new_envp) else -1;
+    free_injected_envp(envp, new_envp);
+    return ret;
 }
 
 const posix_spawnp_fn = *const fn (pid: [*c]c.pid_t, file: [*c]const u8, file_actions: ?*anyopaque, attrp: ?*anyopaque, argv: [*c]const [*c]u8, envp: [*c]const [*c]u8) callconv(.c) c_int;
@@ -79,7 +175,11 @@ export fn posix_spawnp(pid: [*c]c.pid_t, file: [*c]const u8, file_actions: ?*any
         }
     }
 
-    return if (real_posix_spawnp) |func| func(pid, file, file_actions, attrp, argv, envp) else -1;
+    const astraea_path = get_astraea_path();
+    const new_envp = inject_ld_preload(envp, astraea_path);
+    const ret = if (real_posix_spawnp) |func| func(pid, file, file_actions, attrp, argv, new_envp) else -1;
+    free_injected_envp(envp, new_envp);
+    return ret;
 }
 
 // --- Env Hooks ---

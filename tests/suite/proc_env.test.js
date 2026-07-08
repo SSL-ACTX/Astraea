@@ -24,3 +24,17 @@ test('PHASE 7: Restricted package enforcement (ENV & PROC)', () => {
         }
     }
 });
+
+test('PHASE 7: Sandbox inheritance (un-bypassable via LD_PRELOAD stripping)', () => {
+    const env = { ...process.env };
+    delete env.LD_PRELOAD;
+
+    const childRes = spawnSync(process.execPath, [
+        '-e',
+        'console.log(process.env.LD_PRELOAD)'
+    ], { env });
+
+    const stdout = childRes.stdout.toString().trim();
+    assert.ok(stdout.includes('libastraea.so'), `LD_PRELOAD should have been automatically injected. Got: ${stdout}`);
+});
+
