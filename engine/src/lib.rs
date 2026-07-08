@@ -94,8 +94,9 @@ static ENGINE: Lazy<AstraeaEngine> = Lazy::new(|| {
             audit,
         }
     } else {
+        let config_path = std::env::var("ASTRAEA_CONFIG").unwrap_or_else(|_| String::from("astraea.toml"));
         let manifest_str =
-            std::fs::read_to_string("astraea.toml").unwrap_or_else(|_| String::new());
+            std::fs::read_to_string(&config_path).unwrap_or_else(|_| String::new());
         let manifest: Manifest = toml::from_str(&manifest_str).unwrap_or(Manifest {
             packages: HashMap::new(),
             spoofs: HashMap::new(),
