@@ -302,3 +302,147 @@ export fn uv_fs_chown(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8,
 
     return if (real_uv_fs_chown) |func| func(loop, req, path, uid, gid, cb) else -13;
 }
+
+const symlink_fn = *const fn (target: [*c]const u8, linkpath: [*c]const u8) callconv(.c) c_int;
+var real_symlink: ?symlink_fn = null;
+
+export fn symlink(target: [*c]const u8, linkpath: [*c]const u8) callconv(.c) c_int {
+    if (real_symlink == null) real_symlink = common.getRealSymbol(symlink_fn, "symlink");
+
+    if (target != null) {
+        const res = evaluate(target);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+    if (linkpath != null) {
+        const res = evaluate(linkpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+
+    return if (real_symlink) |func| func(target, linkpath) else -1;
+}
+
+const symlinkat_fn = *const fn (target: [*c]const u8, newdirfd: c_int, linkpath: [*c]const u8) callconv(.c) c_int;
+var real_symlinkat: ?symlinkat_fn = null;
+
+export fn symlinkat(target: [*c]const u8, newdirfd: c_int, linkpath: [*c]const u8) callconv(.c) c_int {
+    if (real_symlinkat == null) real_symlinkat = common.getRealSymbol(symlinkat_fn, "symlinkat");
+
+    if (target != null) {
+        const res = evaluate(target);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+    if (linkpath != null) {
+        const res = evaluate(linkpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+
+    return if (real_symlinkat) |func| func(target, newdirfd, linkpath) else -1;
+}
+
+const link_fn = *const fn (oldpath: [*c]const u8, newpath: [*c]const u8) callconv(.c) c_int;
+var real_link: ?link_fn = null;
+
+export fn link(oldpath: [*c]const u8, newpath: [*c]const u8) callconv(.c) c_int {
+    if (real_link == null) real_link = common.getRealSymbol(link_fn, "link");
+
+    if (oldpath != null) {
+        const res = evaluate(oldpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+    if (newpath != null) {
+        const res = evaluate(newpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+
+    return if (real_link) |func| func(oldpath, newpath) else -1;
+}
+
+const linkat_fn = *const fn (olddirfd: c_int, oldpath: [*c]const u8, newdirfd: c_int, newpath: [*c]const u8, flags: c_int) callconv(.c) c_int;
+var real_linkat: ?linkat_fn = null;
+
+export fn linkat(olddirfd: c_int, oldpath: [*c]const u8, newdirfd: c_int, newpath: [*c]const u8, flags: c_int) callconv(.c) c_int {
+    if (real_linkat == null) real_linkat = common.getRealSymbol(linkat_fn, "linkat");
+
+    if (oldpath != null) {
+        const res = evaluate(oldpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+    if (newpath != null) {
+        const res = evaluate(newpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+
+    return if (real_linkat) |func| func(olddirfd, oldpath, newdirfd, newpath, flags) else -1;
+}
+
+const uv_fs_symlink_fn = *const fn (loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, new_path: [*c]const u8, flags: c_int, cb: c.uv_fs_cb) callconv(.c) c_int;
+var real_uv_fs_symlink: ?uv_fs_symlink_fn = null;
+
+export fn uv_fs_symlink(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, new_path: [*c]const u8, flags: c_int, cb: c.uv_fs_cb) callconv(.c) c_int {
+    if (real_uv_fs_symlink == null) real_uv_fs_symlink = common.getRealSymbol(uv_fs_symlink_fn, "uv_fs_symlink");
+
+    if (path != null) {
+        const res = evaluate(path);
+        if (!res.allowed) return -13;
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+    if (new_path != null) {
+        const res = evaluate(new_path);
+        if (!res.allowed) return -13;
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+
+    return if (real_uv_fs_symlink) |func| func(loop, req, path, new_path, flags, cb) else -13;
+}
+
+const uv_fs_link_fn = *const fn (loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, new_path: [*c]const u8, cb: c.uv_fs_cb) callconv(.c) c_int;
+var real_uv_fs_link: ?uv_fs_link_fn = null;
+
+export fn uv_fs_link(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, new_path: [*c]const u8, cb: c.uv_fs_cb) callconv(.c) c_int {
+    if (real_uv_fs_link == null) real_uv_fs_link = common.getRealSymbol(uv_fs_link_fn, "uv_fs_link");
+
+    if (path != null) {
+        const res = evaluate(path);
+        if (!res.allowed) return -13;
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+    if (new_path != null) {
+        const res = evaluate(new_path);
+        if (!res.allowed) return -13;
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+
+    return if (real_uv_fs_link) |func| func(loop, req, path, new_path, cb) else -13;
+}
