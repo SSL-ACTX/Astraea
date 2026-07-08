@@ -393,3 +393,77 @@ fn parse_name(data: [*]u8, len: usize, start_pos: usize, out: []u8) usize {
     out[out_pos] = 0;
     return out_pos;
 }
+
+const sendmsg_fn = *const fn (sockfd: c_int, msg: ?*const c.msghdr, flags: c_int) callconv(.c) isize;
+var real_sendmsg: ?sendmsg_fn = null;
+
+export fn sendmsg(sockfd: c_int, msg: ?*const c.msghdr, flags: c_int) callconv(.c) isize {
+    if (real_sendmsg == null) real_sendmsg = common.getRealSymbol(sendmsg_fn, "sendmsg");
+
+    if (msg) |m| {
+        if (m.msg_name != null and m.msg_namelen > 0) {
+            const addr: *const c.sockaddr = @ptrCast(@alignCast(m.msg_name));
+            var ip_buf: [c.INET6_ADDRSTRLEN]u8 = undefined;
+            var port: u16 = 0;
+
+            if (addr.sa_family == c.AF_INET) {
+                const addr_in: *const c.sockaddr_in = @ptrCast(@alignCast(addr));
+                _ = c.inet_ntop(c.AF_INET, &addr_in.sin_addr, &ip_buf, c.INET_ADDRSTRLEN);
+                port = std.mem.bigToNative(u16, addr_in.sin_port);
+            } else if (addr.sa_family == c.AF_INET6) {
+                const addr_in6: *const c.sockaddr_in6 = @ptrCast(@alignCast(addr));
+                _ = c.inet_ntop(c.AF_INET6, &addr_in6.sin6_addr, &ip_buf, c.INET6_ADDRSTRLEN);
+                port = std.mem.bigToNative(u16, addr_in6.sin6_port);
+            }
+
+            const ip_slice = std.mem.sliceTo(&ip_buf, 0);
+            if (port != 0) {
+                if (common.evaluate_net_access(ip_slice.ptr, port, 0, 17) == common.DECISION_DENY) { // UDP = 17
+                    common.__errno().* = 13; // EACCES
+                    return -1;
+                }
+            }
+        }
+    }
+
+    return if (real_sendmsg) |func| func(sockfd, msg, flags) else -1;
+}
+
+const sendmmsg_fn = *const fn (sockfd: c_int, msgvec: ?[*]c.mmsghdr, vlen: c_uint, flags: c_int) callconv(.c) c_int;
+var real_sendmmsg: ?sendmmsg_fn = null;
+
+export fn sendmmsg(sockfd: c_int, msgvec: ?[*]c.mmsghdr, vlen: c_uint, flags: c_int) callconv(.c) c_int {
+    if (real_sendmmsg == null) real_sendmmsg = common.getRealSymbol(sendmmsg_fn, "sendmmsg");
+
+    if (msgvec) |vec| {
+        var idx: c_uint = 0;
+        while (idx < vlen) : (idx += 1) {
+            const m = &vec[idx].msg_hdr;
+            if (m.msg_name != null and m.msg_namelen > 0) {
+                const addr: *const c.sockaddr = @ptrCast(@alignCast(m.msg_name));
+                var ip_buf: [c.INET6_ADDRSTRLEN]u8 = undefined;
+                var port: u16 = 0;
+
+                if (addr.sa_family == c.AF_INET) {
+                    const addr_in: *const c.sockaddr_in = @ptrCast(@alignCast(addr));
+                    _ = c.inet_ntop(c.AF_INET, &addr_in.sin_addr, &ip_buf, c.INET_ADDRSTRLEN);
+                    port = std.mem.bigToNative(u16, addr_in.sin_port);
+                } else if (addr.sa_family == c.AF_INET6) {
+                    const addr_in6: *const c.sockaddr_in6 = @ptrCast(@alignCast(addr));
+                    _ = c.inet_ntop(c.AF_INET6, &addr_in6.sin6_addr, &ip_buf, c.INET6_ADDRSTRLEN);
+                    port = std.mem.bigToNative(u16, addr_in6.sin6_port);
+                }
+
+                const ip_slice = std.mem.sliceTo(&ip_buf, 0);
+                if (port != 0) {
+                    if (common.evaluate_net_access(ip_slice.ptr, port, 0, 17) == common.DECISION_DENY) { // UDP = 17
+                        common.__errno().* = 13; // EACCES
+                        return -1;
+                    }
+                }
+            }
+        }
+    }
+
+    return if (real_sendmmsg) |func| func(sockfd, msgvec, vlen, flags) else -1;
+}

@@ -80,3 +80,24 @@ asyncTest('NET: Domain case-insensitivity and trailing dot (API.GITHUB.COM.)', a
     });
 });
 
+asyncTest('NET: UDP unauthorized address blocking (sendmsg/sendto)', async () => {
+    return new Promise((resolve, reject) => {
+        const dgram = require('dgram');
+        const client = dgram.createSocket('udp4');
+        const buf = Buffer.from('hello');
+        client.send(buf, 0, buf.length, 9999, '1.2.3.4', (err) => {
+            client.close();
+            if (err) {
+                if (err.code === 'EACCES' || err.code === 'EPERM') {
+                    resolve();
+                } else {
+                    reject(new Error(`Unexpected error: ${err.code}`));
+                }
+            } else {
+                reject(new Error('UDP packet send to unauthorized address should have been blocked'));
+            }
+        });
+    });
+});
+
+
