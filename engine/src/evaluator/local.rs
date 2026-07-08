@@ -143,8 +143,8 @@ impl Evaluator for LocalEvaluator {
         }
     }
 
-    fn register_dns(&self, package: &str, domain: &str, ip: &str) {
-        debug!(target: "astraea", "DNS CACHE: package '{}' resolved '{}' -> '{}'", package, domain, ip);
-        self.net.register_dns(package, domain, vec![ip.to_string()]);
+    fn register_dns(&self, package: &str, domain: &str, ip: &str, ttl: u32) {
+        debug!(target: "astraea", "DNS CACHE: package '{}' resolved '{}' -> '{}' (ttl: {}s)", package, domain, ip, ttl);
+        self.net.register_dns(package, domain, vec![ip.to_string()], ttl);
     }
 }

@@ -12,7 +12,7 @@ pub extern fn evaluate_dlopen(path: [*c]const u8) i32;
 pub extern fn evaluate_net_access(host: [*c]const u8, port: u16, action: i32, protocol: i32) i32;
 pub extern fn evaluate_env_access(key: [*c]const u8) i32;
 pub extern fn evaluate_proc_access(binary: [*c]const u8) i32;
-pub extern fn register_dns_result(domain: [*c]const u8, ip: [*c]const u8) void;
+pub extern fn register_dns_result(domain: [*c]const u8, ip: [*c]const u8, ttl: u32) void;
 pub extern fn init_engine() void;
 pub extern fn free_string(ptr: [*c]u8) void;
 pub extern fn astraea_log(level: i32, message: [*c]const u8) void;

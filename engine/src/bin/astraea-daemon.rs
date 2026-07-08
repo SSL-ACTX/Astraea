@@ -68,12 +68,13 @@ fn handle_client(mut stream: UnixStream, evaluator: Arc<LocalEvaluator>) {
                     package,
                     domain,
                     ip,
+                    ttl,
                 } => {
                     debug!(
-                        "IPC Request: RegisterDns {} -> {} ({})",
-                        package, domain, ip
+                        "IPC Request: RegisterDns {} -> {} ({}) (ttl: {}s)",
+                        package, domain, ip, ttl
                     );
-                    evaluator.register_dns(&package, &domain, &ip);
+                    evaluator.register_dns(&package, &domain, &ip, ttl);
                     IpcResponse::Ack
                 }
             };

@@ -144,8 +144,9 @@ impl NetManager {
         }
     }
 
-    pub fn register_dns(&self, package: &str, domain: &str, ips: Vec<String>) {
-        let expiry = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    pub fn register_dns(&self, package: &str, domain: &str, ips: Vec<String>, ttl: u32) {
+        let ttl_secs = std::cmp::max(5, std::cmp::min(3600, ttl)) as u64;
+        let expiry = std::time::Instant::now() + std::time::Duration::from_secs(ttl_secs);
         for ip_str in ips {
             let entry = DnsEntry {
                 domain: domain.to_string(),
@@ -273,7 +274,7 @@ impl NetManager {
                             for addr_res in addrs {
                                 if addr_res.ip() == addr {
                                     debug!(target: "astraea", "ALLOW NET (Verified): package '{}' -> '{}:{}' matches allowed domain '{}'", package_name, host_or_ip, port, d_patt);
-                                    self.register_dns(package_name, d_patt, vec![ip_key.clone()]);
+                                    self.register_dns(package_name, d_patt, vec![ip_key.clone()], 60);
                                     return true;
                                 }
                             }

@@ -115,11 +115,12 @@ impl Evaluator for RemoteEvaluator {
         }
     }
 
-    fn register_dns(&self, package: &str, domain: &str, ip: &str) {
+    fn register_dns(&self, package: &str, domain: &str, ip: &str, ttl: u32) {
         let req = IpcRequest::RegisterDns {
             package: package.to_string(),
             domain: domain.to_string(),
             ip: ip.to_string(),
+            ttl,
         };
         let _ = self.send_request(req);
     }

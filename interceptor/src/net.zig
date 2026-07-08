@@ -79,13 +79,13 @@ export fn getaddrinfo(node: [*c]const u8, service: [*c]const u8, hints: ?*const 
                 _ = c.inet_ntop(c.AF_INET, &addr_in.sin_addr, &ip_buf, c.INET_ADDRSTRLEN);
                 const ip_slice = std.mem.sliceTo(&ip_buf, 0);
                 common.log_info("DNS RESOLVED: {s} -> {s}", .{ node, ip_slice });
-                common.register_dns_result(node, &ip_buf);
+                common.register_dns_result(node, &ip_buf, 60);
             } else if (curr.*.ai_family == c.AF_INET6) {
                 const addr_in6: *const c.sockaddr_in6 = @ptrCast(@alignCast(curr.*.ai_addr));
                 _ = c.inet_ntop(c.AF_INET6, &addr_in6.sin6_addr, &ip_buf, c.INET6_ADDRSTRLEN);
                 const ip_slice = std.mem.sliceTo(&ip_buf, 0);
                 common.log_info("DNS RESOLVED: {s} -> {s}", .{ node, ip_slice });
-                common.register_dns_result(node, &ip_buf);
+                common.register_dns_result(node, &ip_buf, 60);
             }
         }
     }
@@ -114,11 +114,11 @@ export fn android_getaddrinfofornet(node: [*c]const u8, service: [*c]const u8, h
             if (curr.*.ai_family == c.AF_INET) {
                 const addr_in: *const c.sockaddr_in = @ptrCast(@alignCast(curr.*.ai_addr));
                 _ = c.inet_ntop(c.AF_INET, &addr_in.sin_addr, &ip_buf, c.INET_ADDRSTRLEN);
-                common.register_dns_result(node, &ip_buf);
+                common.register_dns_result(node, &ip_buf, 60);
             } else if (curr.*.ai_family == c.AF_INET6) {
                 const addr_in6: *const c.sockaddr_in6 = @ptrCast(@alignCast(curr.*.ai_addr));
                 _ = c.inet_ntop(c.AF_INET6, &addr_in6.sin6_addr, &ip_buf, c.INET6_ADDRSTRLEN);
-                common.register_dns_result(node, &ip_buf);
+                common.register_dns_result(node, &ip_buf, 60);
             }
         }
     }
@@ -309,8 +309,7 @@ fn parse_and_register_dns(buf: *anyopaque, len: usize) void {
         if (pos + 10 > len) break;
 
         const atype = std.mem.readInt(u16, data[pos .. pos + 2][0..2], .big);
-        // const aclass = std.mem.readInt(u16, data[pos + 2 .. pos + 4][0..2], .big);
-        // const ttl = std.mem.readInt(u32, data[pos + 4 .. pos + 8][0..4], .big);
+        const ttl = std.mem.readInt(u32, data[pos + 4 .. pos + 8][0..4], .big);
         const rdlen = std.mem.readInt(u16, data[pos + 8 .. pos + 10][0..2], .big);
         pos += 10;
 
@@ -322,7 +321,7 @@ fn parse_and_register_dns(buf: *anyopaque, len: usize) void {
                     var ip_buf: [c.INET_ADDRSTRLEN]u8 = undefined;
                     _ = c.inet_ntop(c.AF_INET, data + pos, &ip_buf, c.INET_ADDRSTRLEN);
                     common.log_info("DNS SNOOPED (A): {s} -> {s}", .{ domain_buf[0..domain_len], std.mem.span(@as([*c]u8, @ptrCast(&ip_buf))) });
-                    common.register_dns_result(&domain_buf, &ip_buf);
+                    common.register_dns_result(&domain_buf, &ip_buf, ttl);
                 }
             }
         } else if (atype == 28 and rdlen == 16) { // AAAA record
@@ -333,7 +332,7 @@ fn parse_and_register_dns(buf: *anyopaque, len: usize) void {
                     var ip_buf: [c.INET6_ADDRSTRLEN]u8 = undefined;
                     _ = c.inet_ntop(c.AF_INET6, data + pos, &ip_buf, c.INET6_ADDRSTRLEN);
                     common.log_info("DNS SNOOPED (AAAA): {s} -> {s}", .{ domain_buf[0..domain_len], std.mem.span(@as([*c]u8, @ptrCast(&ip_buf))) });
-                    common.register_dns_result(&domain_buf, &ip_buf);
+                    common.register_dns_result(&domain_buf, &ip_buf, ttl);
                 }
             }
         }

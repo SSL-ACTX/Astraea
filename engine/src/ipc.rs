@@ -29,6 +29,7 @@ pub enum IpcRequest {
         package: String,
         domain: String,
         ip: String,
+        ttl: u32,
     },
 }
 

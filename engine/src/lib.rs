@@ -415,7 +415,7 @@ pub unsafe extern "C" fn evaluate_proc_access(binary: *const c_char) -> i32 {
 ///
 /// Both `domain` and `ip` pointers must be valid, null-terminated C strings.
 #[no_mangle]
-pub unsafe extern "C" fn register_dns_result(domain: *const c_char, ip: *const c_char) {
+pub unsafe extern "C" fn register_dns_result(domain: *const c_char, ip: *const c_char, ttl: u32) {
     if domain.is_null() || ip.is_null() {
         return;
     }
@@ -426,7 +426,7 @@ pub unsafe extern "C" fn register_dns_result(domain: *const c_char, ip: *const c
 
     if let (Ok(d), Ok(i)) = (CStr::from_ptr(domain).to_str(), CStr::from_ptr(ip).to_str()) {
         let package = get_current_package();
-        ENGINE.evaluator.register_dns(&package, d, i);
+        ENGINE.evaluator.register_dns(&package, d, i, ttl);
     }
 
     IN_ASTRAEA_HOOK.with(|h| h.set(false));

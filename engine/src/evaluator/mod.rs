@@ -17,7 +17,7 @@ pub trait Evaluator: Send + Sync {
         -> i32;
     fn evaluate_env(&self, package: &str, key: &str) -> i32;
     fn evaluate_proc(&self, package: &str, binary: &str) -> i32;
-    fn register_dns(&self, package: &str, domain: &str, ip: &str);
+    fn register_dns(&self, package: &str, domain: &str, ip: &str, ttl: u32);
 }
 
 pub mod local;
