@@ -77,6 +77,12 @@ impl FsManager {
             || normalized == "/etc/hosts"
             || normalized == "/etc/resolv.conf"
             || normalized.starts_with("/data/data/com.termux/files/usr/lib/")
+            || normalized.starts_with("/usr/lib/")
+            || normalized.starts_with("/usr/share/")
+            || normalized.starts_with("/lib/")
+            || normalized.starts_with("/lib64/")
+            || normalized.starts_with("/etc/ssl/")
+            || normalized.starts_with("/etc/pki/")
         // Node/System libraries
         {
             return true;
