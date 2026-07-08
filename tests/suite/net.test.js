@@ -100,4 +100,21 @@ asyncTest('NET: UDP unauthorized address blocking (sendmsg/sendto)', async () =>
     });
 });
 
+asyncTest('NET: UNIX domain socket connect/bind blocking', async () => {
+    return new Promise((resolve, reject) => {
+        const fs = require('fs');
+        const server = net.createServer();
+        server.listen('denied_path.sock', () => {
+            server.close();
+            try { fs.unlinkSync('denied_path.sock'); } catch (e) {}
+            reject(new Error('UNIX socket bind outside allowed paths should have been blocked'));
+        });
+        server.on('error', (e) => {
+            if (e.code === 'EACCES' || e.code === 'EPERM') resolve();
+            else reject(new Error(`Unexpected error code: ${e.code}`));
+        });
+    });
+});
+
+
 

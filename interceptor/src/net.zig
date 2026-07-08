@@ -2,6 +2,9 @@ const std = @import("std");
 const common = @import("common.zig");
 const c = common.c;
 
+extern fn getenv(name: [*c]const u8) [*c]const u8;
+
+
 const socket_fn = *const fn (domain: c_int, type_: c_int, protocol: c_int) callconv(.c) c_int;
 var real_socket: ?socket_fn = null;
 
@@ -34,6 +37,25 @@ export fn bind(sockfd: c_int, addr: *const c.sockaddr, addrlen: c.socklen_t) cal
         const addr_in6: *const c.sockaddr_in6 = @ptrCast(@alignCast(addr));
         _ = c.inet_ntop(c.AF_INET6, &addr_in6.sin6_addr, &ip_buf, c.INET6_ADDRSTRLEN);
         port = std.mem.bigToNative(u16, addr_in6.sin6_port);
+    } else if (addr.sa_family == c.AF_UNIX) {
+        const addr_un: *const c.sockaddr_un = @ptrCast(@alignCast(addr));
+        const path_ptr = &addr_un.sun_path;
+        const socket_path = std.mem.sliceTo(@as([*c]const u8, @ptrCast(path_ptr)), 0);
+        var is_telemetry = false;
+        const tel_path_c = getenv("ASTRAEA_TELEMETRY");
+        if (tel_path_c != null) {
+            const tel_path = std.mem.span(tel_path_c);
+            if (std.mem.eql(u8, socket_path, tel_path)) {
+                is_telemetry = true;
+            }
+        }
+        if (!is_telemetry) {
+            const res = common.evaluate_fs_access(path_ptr, null);
+            if (res.decision == common.DECISION_DENY) {
+                common.__errno().* = 13; // EACCES
+                return -1;
+            }
+        }
     }
 
     const ip_slice = std.mem.sliceTo(&ip_buf, 0);
@@ -164,6 +186,25 @@ export fn connect(sockfd: c_int, addr: *const c.sockaddr, addrlen: c.socklen_t) 
         const addr_in6: *const c.sockaddr_in6 = @ptrCast(@alignCast(addr));
         _ = c.inet_ntop(c.AF_INET6, &addr_in6.sin6_addr, &ip_buf, c.INET6_ADDRSTRLEN);
         port = std.mem.bigToNative(u16, addr_in6.sin6_port);
+    } else if (addr.sa_family == c.AF_UNIX) {
+        const addr_un: *const c.sockaddr_un = @ptrCast(@alignCast(addr));
+        const path_ptr = &addr_un.sun_path;
+        const socket_path = std.mem.sliceTo(@as([*c]const u8, @ptrCast(path_ptr)), 0);
+        var is_telemetry = false;
+        const tel_path_c = getenv("ASTRAEA_TELEMETRY");
+        if (tel_path_c != null) {
+            const tel_path = std.mem.span(tel_path_c);
+            if (std.mem.eql(u8, socket_path, tel_path)) {
+                is_telemetry = true;
+            }
+        }
+        if (!is_telemetry) {
+            const res = common.evaluate_fs_access(path_ptr, null);
+            if (res.decision == common.DECISION_DENY) {
+                common.__errno().* = 13; // EACCES
+                return -1;
+            }
+        }
     }
 
     const ip_slice = std.mem.sliceTo(&ip_buf, 0);
