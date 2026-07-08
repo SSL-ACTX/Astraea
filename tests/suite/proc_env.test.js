@@ -14,5 +14,13 @@ test('PHASE 7: Root package should be allowed to spawn processes', () => {
 });
 
 test('PHASE 7: Restricted package enforcement (ENV & PROC)', () => {
-    restricted.runTests(assert);
+    const fs = require('fs');
+    fs.writeFileSync('tests/protected.txt', 'This file is protected');
+    try {
+        restricted.runTests(assert);
+    } finally {
+        if (fs.existsSync('tests/protected.txt')) {
+            fs.unlinkSync('tests/protected.txt');
+        }
+    }
 });

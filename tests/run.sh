@@ -10,9 +10,9 @@ NC='\033[0m' # No Color
 
 echo "--- Astraea Security Mesh Test Suite ---"
 
-# Compilation Stage
 if [ "${SKIP_BUILD}" != "1" ]; then
     echo "Building Astraea..."
+    rm -rf zig-out/ zig-cache/
     zig build -j2
 fi
 

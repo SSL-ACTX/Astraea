@@ -61,3 +61,244 @@ export fn uv_fs_open(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, 
     if (res.spoofed) common.free_string(@constCast(res.path));
     return fd;
 }
+
+const unlink_fn = *const fn (pathname: [*c]const u8) callconv(.c) c_int;
+var real_unlink: ?unlink_fn = null;
+
+export fn unlink(pathname: [*c]const u8) callconv(.c) c_int {
+    if (real_unlink == null) real_unlink = common.getRealSymbol(unlink_fn, "unlink");
+
+    if (pathname != null) {
+        const res = evaluate(pathname);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) {
+            const fd = if (real_unlink) |func| func(res.path) else -1;
+            common.free_string(@constCast(res.path));
+            return fd;
+        }
+    }
+
+    return if (real_unlink) |func| func(pathname) else -1;
+}
+
+const unlinkat_fn = *const fn (dirfd: c_int, pathname: [*c]const u8, flags: c_int) callconv(.c) c_int;
+var real_unlinkat: ?unlinkat_fn = null;
+
+export fn unlinkat(dirfd: c_int, pathname: [*c]const u8, flags: c_int) callconv(.c) c_int {
+    if (real_unlinkat == null) real_unlinkat = common.getRealSymbol(unlinkat_fn, "unlinkat");
+
+    if (pathname != null) {
+        const res = evaluate(pathname);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) {
+            const fd = if (real_unlinkat) |func| func(dirfd, res.path, flags) else -1;
+            common.free_string(@constCast(res.path));
+            return fd;
+        }
+    }
+
+    return if (real_unlinkat) |func| func(dirfd, pathname, flags) else -1;
+}
+
+const creat_fn = *const fn (pathname: [*c]const u8, mode: c.mode_t) callconv(.c) c_int;
+var real_creat: ?creat_fn = null;
+
+export fn creat(pathname: [*c]const u8, mode: c.mode_t) callconv(.c) c_int {
+    if (real_creat == null) real_creat = common.getRealSymbol(creat_fn, "creat");
+
+    if (pathname != null) {
+        const res = evaluate(pathname);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) {
+            const fd = if (real_creat) |func| func(res.path, mode) else -1;
+            common.free_string(@constCast(res.path));
+            return fd;
+        }
+    }
+
+    return if (real_creat) |func| func(pathname, mode) else -1;
+}
+
+const rename_fn = *const fn (oldpath: [*c]const u8, newpath: [*c]const u8) callconv(.c) c_int;
+var real_rename: ?rename_fn = null;
+
+export fn rename(oldpath: [*c]const u8, newpath: [*c]const u8) callconv(.c) c_int {
+    if (real_rename == null) real_rename = common.getRealSymbol(rename_fn, "rename");
+
+    if (oldpath != null) {
+        const res = evaluate(oldpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) {
+            common.free_string(@constCast(res.path));
+        }
+    }
+    if (newpath != null) {
+        const res = evaluate(newpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) {
+            common.free_string(@constCast(res.path));
+        }
+    }
+
+    return if (real_rename) |func| func(oldpath, newpath) else -1;
+}
+
+const renameat_fn = *const fn (olddirfd: c_int, oldpath: [*c]const u8, newdirfd: c_int, newpath: [*c]const u8) callconv(.c) c_int;
+var real_renameat: ?renameat_fn = null;
+
+export fn renameat(olddirfd: c_int, oldpath: [*c]const u8, newdirfd: c_int, newpath: [*c]const u8) callconv(.c) c_int {
+    if (real_renameat == null) real_renameat = common.getRealSymbol(renameat_fn, "renameat");
+
+    if (oldpath != null) {
+        const res = evaluate(oldpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) {
+            common.free_string(@constCast(res.path));
+        }
+    }
+    if (newpath != null) {
+        const res = evaluate(newpath);
+        if (!res.allowed) {
+            common.__errno().* = common.EACCES;
+            return -1;
+        }
+        if (res.spoofed) {
+            common.free_string(@constCast(res.path));
+        }
+    }
+
+    return if (real_renameat) |func| func(olddirfd, oldpath, newdirfd, newpath) else -1;
+}
+
+const uv_fs_unlink_fn = *const fn (loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, cb: c.uv_fs_cb) callconv(.c) c_int;
+var real_uv_fs_unlink: ?uv_fs_unlink_fn = null;
+
+export fn uv_fs_unlink(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, cb: c.uv_fs_cb) callconv(.c) c_int {
+    if (real_uv_fs_unlink == null) real_uv_fs_unlink = common.getRealSymbol(uv_fs_unlink_fn, "uv_fs_unlink");
+
+    if (path != null) {
+        const res = evaluate(path);
+        if (!res.allowed) return -13; // -EACCES in libuv
+        if (res.spoofed) {
+            const fd = if (real_uv_fs_unlink) |func| func(loop, req, res.path, cb) else -13;
+            common.free_string(@constCast(res.path));
+            return fd;
+        }
+    }
+
+    return if (real_uv_fs_unlink) |func| func(loop, req, path, cb) else -13;
+}
+
+const uv_fs_mkdir_fn = *const fn (loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, mode: c_int, cb: c.uv_fs_cb) callconv(.c) c_int;
+var real_uv_fs_mkdir: ?uv_fs_mkdir_fn = null;
+
+export fn uv_fs_mkdir(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, mode: c_int, cb: c.uv_fs_cb) callconv(.c) c_int {
+    if (real_uv_fs_mkdir == null) real_uv_fs_mkdir = common.getRealSymbol(uv_fs_mkdir_fn, "uv_fs_mkdir");
+
+    if (path != null) {
+        const res = evaluate(path);
+        if (!res.allowed) return -13; // -EACCES in libuv
+        if (res.spoofed) {
+            const fd = if (real_uv_fs_mkdir) |func| func(loop, req, res.path, mode, cb) else -13;
+            common.free_string(@constCast(res.path));
+            return fd;
+        }
+    }
+
+    return if (real_uv_fs_mkdir) |func| func(loop, req, path, mode, cb) else -13;
+}
+
+const uv_fs_rmdir_fn = *const fn (loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, cb: c.uv_fs_cb) callconv(.c) c_int;
+var real_uv_fs_rmdir: ?uv_fs_rmdir_fn = null;
+
+export fn uv_fs_rmdir(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, cb: c.uv_fs_cb) callconv(.c) c_int {
+    if (real_uv_fs_rmdir == null) real_uv_fs_rmdir = common.getRealSymbol(uv_fs_rmdir_fn, "uv_fs_rmdir");
+
+    if (path != null) {
+        const res = evaluate(path);
+        if (!res.allowed) return -13; // -EACCES in libuv
+        if (res.spoofed) {
+            const fd = if (real_uv_fs_rmdir) |func| func(loop, req, res.path, cb) else -13;
+            common.free_string(@constCast(res.path));
+            return fd;
+        }
+    }
+
+    return if (real_uv_fs_rmdir) |func| func(loop, req, path, cb) else -13;
+}
+
+const uv_fs_rename_fn = *const fn (loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, new_path: [*c]const u8, cb: c.uv_fs_cb) callconv(.c) c_int;
+var real_uv_fs_rename: ?uv_fs_rename_fn = null;
+
+export fn uv_fs_rename(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, new_path: [*c]const u8, cb: c.uv_fs_cb) callconv(.c) c_int {
+    if (real_uv_fs_rename == null) real_uv_fs_rename = common.getRealSymbol(uv_fs_rename_fn, "uv_fs_rename");
+
+    if (path != null) {
+        const res = evaluate(path);
+        if (!res.allowed) return -13;
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+    if (new_path != null) {
+        const res = evaluate(new_path);
+        if (!res.allowed) return -13;
+        if (res.spoofed) common.free_string(@constCast(res.path));
+    }
+
+    return if (real_uv_fs_rename) |func| func(loop, req, path, new_path, cb) else -13;
+}
+
+const uv_fs_chmod_fn = *const fn (loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, mode: c_int, cb: c.uv_fs_cb) callconv(.c) c_int;
+var real_uv_fs_chmod: ?uv_fs_chmod_fn = null;
+
+export fn uv_fs_chmod(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, mode: c_int, cb: c.uv_fs_cb) callconv(.c) c_int {
+    if (real_uv_fs_chmod == null) real_uv_fs_chmod = common.getRealSymbol(uv_fs_chmod_fn, "uv_fs_chmod");
+
+    if (path != null) {
+        const res = evaluate(path);
+        if (!res.allowed) return -13;
+        if (res.spoofed) {
+            const fd = if (real_uv_fs_chmod) |func| func(loop, req, res.path, mode, cb) else -13;
+            common.free_string(@constCast(res.path));
+            return fd;
+        }
+    }
+
+    return if (real_uv_fs_chmod) |func| func(loop, req, path, mode, cb) else -13;
+}
+
+const uv_fs_chown_fn = *const fn (loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, uid: c_int, gid: c_int, cb: c.uv_fs_cb) callconv(.c) c_int;
+var real_uv_fs_chown: ?uv_fs_chown_fn = null;
+
+export fn uv_fs_chown(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, uid: c_int, gid: c_int, cb: c.uv_fs_cb) callconv(.c) c_int {
+    if (real_uv_fs_chown == null) real_uv_fs_chown = common.getRealSymbol(uv_fs_chown_fn, "uv_fs_chown");
+
+    if (path != null) {
+        const res = evaluate(path);
+        if (!res.allowed) return -13;
+        if (res.spoofed) {
+            const fd = if (real_uv_fs_chown) |func| func(loop, req, res.path, uid, gid, cb) else -13;
+            common.free_string(@constCast(res.path));
+            return fd;
+        }
+    }
+
+    return if (real_uv_fs_chown) |func| func(loop, req, path, uid, gid, cb) else -13;
+}

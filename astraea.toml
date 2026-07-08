@@ -12,7 +12,10 @@ network = [
 ]
 
 [packages.restricted_package]
-fs = ["read:**"]
+fs = [
+    "read:tests/node_modules/restricted_package/**",
+    "read:tests/suite/**"
+]
 env = ["SAFE_VAR"]
 proc = ["/data/data/com.termux/files/usr/bin/whoami"]
 
