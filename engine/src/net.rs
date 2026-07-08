@@ -289,14 +289,20 @@ impl NetManager {
     }
 
     fn match_domain(&self, pattern: &str, domain: &str) -> bool {
-        if pattern == "*" {
+        let pattern_lower = pattern.to_lowercase();
+        let mut domain_lower = domain.to_lowercase();
+        if domain_lower.ends_with('.') {
+            domain_lower.pop();
+        }
+
+        if pattern_lower == "*" {
             return true;
         }
-        if pattern.starts_with("*.") {
-            let suffix = &pattern[1..]; // ".github.com"
-            domain.ends_with(suffix)
+        if pattern_lower.starts_with("*.") {
+            let suffix = &pattern_lower[1..]; // ".github.com"
+            domain_lower.ends_with(suffix)
         } else {
-            pattern == domain
+            pattern_lower == domain_lower
         }
     }
 }

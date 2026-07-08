@@ -71,3 +71,12 @@ asyncTest('NET: Bind blocked outside port range', async () => {
     });
 });
 
+asyncTest('NET: Domain case-insensitivity and trailing dot (API.GITHUB.COM.)', async () => {
+    return new Promise((resolve, reject) => {
+        const req = http.get('http://API.GITHUB.COM.', { timeout: 5000 }, (res) => {
+            resolve();
+        });
+        req.on('error', (e) => reject(new Error(`Resolution failed: ${e.code}`)));
+    });
+});
+
