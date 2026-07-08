@@ -125,3 +125,31 @@ export fn putenv(string: [*c]u8) callconv(.c) c_int {
 
     return if (real_putenv) |func| func(string) else -1;
 }
+
+const sigaction_fn = *const fn (signum: c_int, act: ?*const anyopaque, oldact: ?*anyopaque) callconv(.c) c_int;
+var real_sigaction: ?sigaction_fn = null;
+
+export fn sigaction(signum: c_int, act: ?*const anyopaque, oldact: ?*anyopaque) callconv(.c) c_int {
+    if (real_sigaction == null) real_sigaction = common.getRealSymbol(sigaction_fn, "sigaction");
+
+    if (signum == 31) { // SIGSYS
+        common.log_info("sigaction: blocked attempt to register handler for SIGSYS", .{});
+        return if (real_sigaction) |func| func(signum, null, oldact) else 0;
+    }
+
+    return if (real_sigaction) |func| func(signum, act, oldact) else -1;
+}
+
+const signal_fn = *const fn (signum: c_int, handler: ?*const anyopaque) callconv(.c) ?*anyopaque;
+var real_signal: ?signal_fn = null;
+
+export fn signal(signum: c_int, handler: ?*const anyopaque) callconv(.c) ?*anyopaque {
+    if (real_signal == null) real_signal = common.getRealSymbol(signal_fn, "signal");
+
+    if (signum == 31) { // SIGSYS
+        common.log_info("signal: blocked attempt to register handler for SIGSYS", .{});
+        return null;
+    }
+
+    return if (real_signal) |func| func(signum, handler) else null;
+}
