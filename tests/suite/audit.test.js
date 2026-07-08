@@ -28,7 +28,7 @@ test('PHASE 8: Learning Mode (Audit Logging)', () => {
     const res = spawnSync(process.execPath, ['-e', code], { env });
     
     // Wait a bit for the async logger to flush
-    spawnSync('sleep', ['0.1']);
+    spawnSync('sleep', ['0.5']);
 
     assert.ok(fs.existsSync(AUDIT_LOG), 'Audit log should be created');
     

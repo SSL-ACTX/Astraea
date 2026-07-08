@@ -5,6 +5,7 @@ use once_cell::sync::Lazy;
 include!(concat!(env!("OUT_DIR"), "/v8_symbols.rs"));
 
 type IsolateTryGetCurrentFn = unsafe extern "C" fn() -> *mut c_void;
+type IsolateGetCurrentContextFn = unsafe extern "C" fn(isolate: *mut c_void) -> *mut c_void;
 type HandleScopeCtorFn = unsafe extern "C" fn(ptr: *mut c_void, isolate: *mut c_void);
 type HandleScopeDtorFn = unsafe extern "C" fn(ptr: *mut c_void);
 type StackTraceCurrentFn =
@@ -25,6 +26,7 @@ type StringWriteUtf8Fn = unsafe extern "C" fn(
 
 pub struct V8Bindings {
     pub isolate_try_get_current: IsolateTryGetCurrentFn,
+    pub isolate_get_current_context: IsolateGetCurrentContextFn,
     pub handle_scope_ctor: HandleScopeCtorFn,
     pub handle_scope_dtor: HandleScopeDtorFn,
     pub stack_trace_current: StackTraceCurrentFn,
@@ -41,6 +43,10 @@ pub static V8: Lazy<Option<V8Bindings>> = Lazy::new(|| unsafe {
     let isolate_try_get_current: Option<IsolateTryGetCurrentFn> = std::mem::transmute(libc::dlsym(
         handle,
         V8_ISOLATE_TRY_GET_CURRENT_MANGLED.as_ptr() as *const c_char,
+    ));
+    let isolate_get_current_context: Option<IsolateGetCurrentContextFn> = std::mem::transmute(libc::dlsym(
+        handle,
+        V8_ISOLATE_GET_CURRENT_CONTEXT_MANGLED.as_ptr() as *const c_char,
     ));
     let handle_scope_ctor: Option<HandleScopeCtorFn> = std::mem::transmute(libc::dlsym(
         handle,
@@ -79,6 +85,7 @@ pub static V8: Lazy<Option<V8Bindings>> = Lazy::new(|| unsafe {
 
     if let (
         Some(isolate_try_get_current),
+        Some(isolate_get_current_context),
         Some(handle_scope_ctor),
         Some(handle_scope_dtor),
         Some(stack_trace_current),
@@ -89,6 +96,7 @@ pub static V8: Lazy<Option<V8Bindings>> = Lazy::new(|| unsafe {
         Some(string_write_utf8),
     ) = (
         isolate_try_get_current,
+        isolate_get_current_context,
         handle_scope_ctor,
         handle_scope_dtor,
         stack_trace_current,
@@ -100,6 +108,7 @@ pub static V8: Lazy<Option<V8Bindings>> = Lazy::new(|| unsafe {
     ) {
         Some(V8Bindings {
             isolate_try_get_current,
+            isolate_get_current_context,
             handle_scope_ctor,
             handle_scope_dtor,
             stack_trace_current,

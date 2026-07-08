@@ -4,7 +4,7 @@ import time
 import signal
 import json
 import socket
-import threading
+
 
 def run_daemon():
     print("--- Starting Astraea Daemon ---")
@@ -19,20 +19,21 @@ def run_daemon():
         stderr=subprocess.STDOUT,
         env=env,
         text=True,
-        preexec_fn=os.setsid
+        preexec_fn=os.setsid,
     )
     return daemon_proc
+
 
 def tail_telemetry(socket_path, events_list):
     if os.path.exists(socket_path):
         os.remove(socket_path)
-    
+
     # The daemon creates the socket, so we wait for it
     max_retries = 10
     while not os.path.exists(socket_path) and max_retries > 0:
         time.sleep(0.5)
         max_retries -= 1
-    
+
     if not os.path.exists(socket_path):
         print(f"Error: Telemetry socket {socket_path} not created by daemon")
         return
@@ -56,6 +57,7 @@ def tail_telemetry(socket_path, events_list):
     except Exception as e:
         print(f"Telemetry collector error: {e}")
 
+
 def run_test(test_file, telemetry_socket):
     print(f"--- Running Test: {test_file} ---")
     env = os.environ.copy()
@@ -63,14 +65,10 @@ def run_test(test_file, telemetry_socket):
     env["ASTRAEA_TELEMETRY"] = telemetry_socket
     env["LD_PRELOAD"] = os.path.abspath("zig-out/lib/libastraea.so")
     env["RUST_LOG"] = "astraea=debug,engine=debug"
-    
+
     try:
         result = subprocess.run(
-            ["node", test_file],
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=20
+            ["node", test_file], env=env, capture_output=True, text=True, timeout=20
         )
         print(result.stdout)
         print(result.stderr)
@@ -79,33 +77,35 @@ def run_test(test_file, telemetry_socket):
         print(f"Test {test_file} timed out")
         return False
 
+
 def main():
     telemetry_socket = "/data/data/com.termux/files/usr/tmp/astraea.sock"
     temp_dir = os.environ.get("TMPDIR", "/tmp")
     telemetry_socket = os.path.join(temp_dir, "astraea.telemetry.sock")
-    
+
     daemon_proc = run_daemon()
-    time.sleep(2) # Wait for daemon to initialize
-    
+    time.sleep(2)  # Wait for daemon to initialize
+
     test_suites = [
         "tests/suite/fs.test.js",
         "tests/suite/net.test.js",
-        "tests/suite/native.test.js"
+        "tests/suite/native.test.js",
     ]
-    
+
     all_passed = True
     for suite in test_suites:
         if not run_test(suite, telemetry_socket):
             all_passed = False
-    
+
     # Cleanup
     os.killpg(os.getpgid(daemon_proc.pid), signal.SIGTERM)
-    
+
     if all_passed:
         print("\n✅ VERIFICATION SUCCESSFUL")
     else:
         print("\n❌ VERIFICATION FAILED")
         exit(1)
+
 
 if __name__ == "__main__":
     main()

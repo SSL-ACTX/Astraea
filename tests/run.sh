@@ -11,7 +11,10 @@ NC='\033[0m' # No Color
 echo "--- Astraea Security Mesh Test Suite ---"
 
 # Compilation Stage
-echo "Skipping build, reusing existing libastraea.so..."
+if [ "${SKIP_BUILD}" != "1" ]; then
+    echo "Building Astraea..."
+    zig build -j2
+fi
 
 # Execution Stage
 for test_file in tests/suite/*.test.js; do

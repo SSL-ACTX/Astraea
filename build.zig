@@ -45,7 +45,13 @@ pub fn build(b: *std.Build) void {
 
     // Final link stage using Clang to produce the shared library.
     const rust_profile = if (optimize == .Debug) "debug" else "release";
-    const rust_lib_path = b.path(b.fmt("engine/target/{s}/libengine.a", .{rust_profile}));
+    const rust_lib_path = if (is_android)
+        b.path(b.fmt("engine/target/{s}/{s}/libengine.a", .{
+            if (target.result.cpu.arch == .aarch64) "aarch64-linux-android" else "arm-linux-androideabi",
+            rust_profile,
+        }))
+    else
+        b.path(b.fmt("engine/target/{s}/libengine.a", .{rust_profile}));
 
     const output_dir = "zig-out/lib";
 

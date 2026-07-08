@@ -55,8 +55,8 @@ export fn uv_fs_open(loop: ?*c.uv_loop_t, req: ?*c.uv_fs_t, path: [*c]const u8, 
     const res = evaluate(path);
     if (!res.allowed) return -1;
 
-    // We must pass the original path to the real uv_fs_open as it will be used asynchronously
-    const fd = if (real_uv_fs_open) |func| func(loop, req, path, flags, mode, cb) else -1;
+    // We pass the evaluated/spoofed path to the real uv_fs_open, which copies it internally
+    const fd = if (real_uv_fs_open) |func| func(loop, req, res.path, flags, mode, cb) else -1;
 
     if (res.spoofed) common.free_string(@constCast(res.path));
     return fd;

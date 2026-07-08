@@ -29,7 +29,10 @@ impl AuditLogger {
 
         thread::spawn(move || {
             let mut current_sink: Option<Box<dyn Write + Send>> = match &sink {
-                AuditSink::File(path) => File::create(path)
+                AuditSink::File(path) => std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
                     .ok()
                     .map(|f| Box::new(f) as Box<dyn Write + Send>),
                 AuditSink::Uds(path) => UnixStream::connect(path)

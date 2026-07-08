@@ -63,6 +63,7 @@ fn main() {
     // Define internal V8 target functions and their expected demangled signatures.
     let targets = vec![
         ("V8_ISOLATE_TRY_GET_CURRENT", "v8::Isolate::TryGetCurrent()"),
+        ("V8_ISOLATE_GET_CURRENT_CONTEXT", "v8::Isolate::GetCurrentContext()"),
         ("V8_HANDLE_SCOPE_CTOR", "v8::HandleScope::HandleScope(v8::Isolate*)"),
         ("V8_HANDLE_SCOPE_DTOR", "v8::HandleScope::~HandleScope()"),
         ("V8_STACK_TRACE_CURRENT", "v8::StackTrace::CurrentStackTrace(v8::Isolate*, int, v8::StackTrace::StackTraceOptions)"),

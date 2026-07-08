@@ -91,16 +91,29 @@ pub fn extract_package_name(path: &str) -> &str {
 pub fn get_current_package() -> String {
     let mut js_origin_local = String::with_capacity(128);
 
-    if let Some(v8) = V8.as_ref() {
+    tracing::debug!("get_current_package: entering");
+    let is_main_thread = unsafe { libc::gettid() == libc::getpid() };
+    if is_main_thread {
+        if let Some(v8) = V8.as_ref() {
+        tracing::debug!("get_current_package: V8 bindings found");
         let isolate = unsafe { (v8.isolate_try_get_current)() };
 
         if !isolate.is_null() {
-            unsafe {
+            let context = unsafe { (v8.isolate_get_current_context)(isolate) };
+            if !context.is_null() {
+                tracing::debug!("get_current_package: Isolate found: {:?}", isolate);
+                unsafe {
                 let mut handle_scope = [0u64; 4];
+                tracing::debug!("get_current_package: before handle_scope_ctor");
                 (v8.handle_scope_ctor)(handle_scope.as_mut_ptr() as *mut c_void, isolate);
+                tracing::debug!("get_current_package: after handle_scope_ctor");
+                
                 let stack_handle = (v8.stack_trace_current)(isolate, 50, 0);
+                tracing::debug!("get_current_package: stack_handle: {:?}", stack_handle);
+                
                 if !stack_handle.is_null() {
                     let frame_count = (v8.stack_trace_get_frame_count)(stack_handle);
+                    tracing::debug!("get_current_package: frame_count: {}", frame_count);
 
                     // Stack Anomaly Detection: Monitor for unusual stack depths
                     if frame_count >= 50 {
@@ -126,19 +139,28 @@ pub fn get_current_package() -> String {
                                 && !js_origin_local.starts_with("node:")
                                 && !js_origin_local.starts_with("internal/")
                             {
+                                tracing::debug!("get_current_package: Found JS frame: {}", js_origin_local);
                                 break;
                             }
                         }
                     }
                 }
+                tracing::debug!("get_current_package: before handle_scope_dtor");
                 (v8.handle_scope_dtor)(handle_scope.as_mut_ptr() as *mut c_void);
+                tracing::debug!("get_current_package: after handle_scope_dtor");
             }
             if !js_origin_local.is_empty() {
                 if let Ok(mut sticky) = LAST_USER_CONTEXT.write() {
                     *sticky = js_origin_local.clone();
                 }
             }
+            } else {
+                tracing::debug!("get_current_package: No active Context");
+            }
+        } else {
+            tracing::debug!("get_current_package: No active Isolate");
         }
+    }
     }
 
     let js_origin = if js_origin_local.is_empty() {
@@ -151,5 +173,7 @@ pub fn get_current_package() -> String {
         js_origin_local
     };
 
-    extract_package_name(&js_origin).to_string()
+    let result = extract_package_name(&js_origin).to_string();
+    tracing::debug!("get_current_package: result: {}", result);
+    result
 }
