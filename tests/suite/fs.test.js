@@ -39,3 +39,14 @@ asyncTest('FS: Content spoofing & redirection async (secret.txt)', async () => {
     });
 });
 
+test('FS: Symlink traversal escape prevention', () => {
+    const symlinkPath = 'tests/symlink_outside';
+    try {
+        fs.readFileSync(symlinkPath, 'utf8');
+        throw new Error('Access should have been denied');
+    } catch (e) {
+        assert.strictEqual(e.code, 'EACCES');
+    }
+});
+
+

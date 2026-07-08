@@ -16,6 +16,16 @@ if [ "${SKIP_BUILD}" != "1" ]; then
     zig build -j2
 fi
 
+# Create outside file and symlink for traversal testing
+echo "secret outside" > /data/data/com.termux/files/home/secret_outside.txt
+ln -sf /data/data/com.termux/files/home/secret_outside.txt tests/symlink_outside
+
+cleanup() {
+    rm -f /data/data/com.termux/files/home/secret_outside.txt
+    rm -f tests/symlink_outside
+}
+trap cleanup EXIT
+
 # Execution Stage
 for test_file in tests/suite/*.test.js; do
     name=$(basename "$test_file")

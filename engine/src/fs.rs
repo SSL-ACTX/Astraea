@@ -66,33 +66,44 @@ impl FsManager {
             self.project_root.join(&path)
         };
 
-        // Normalize for system path checks
-        let normalized = self.normalize_path(&absolute_path);
+        // Normalize original absolute path
+        let normalized_orig = self.normalize_path(&absolute_path);
 
-        // System Paths - Always Allow
-        if normalized.starts_with("/data/data/com.termux/files/usr/etc/")
-            || normalized.starts_with("/proc/")
-            || normalized.starts_with("/sys/")
-            || normalized.starts_with("/dev/")
-            || normalized == "/etc/hosts"
-            || normalized == "/etc/resolv.conf"
-            || normalized.starts_with("/data/data/com.termux/files/usr/lib/")
-            || normalized.starts_with("/usr/lib/")
-            || normalized.starts_with("/usr/share/")
-            || normalized.starts_with("/lib/")
-            || normalized.starts_with("/lib64/")
-            || normalized.starts_with("/etc/ssl/")
-            || normalized.starts_with("/etc/pki/")
-        // Node/System libraries
-        {
+        // Canonicalize first to resolve all symlinks and '..' components!
+        let canonical_path = absolute_path.canonicalize().unwrap_or(absolute_path.clone());
+
+        // Normalize canonicalized path
+        let normalized_can = self.normalize_path(&canonical_path);
+
+        // Helper to check if a normalized path is in the system whitelist
+        let is_system_path = |p: &str| -> bool {
+            p.starts_with("/data/data/com.termux/files/usr/etc/")
+                || p.starts_with("/proc/")
+                || p.starts_with("/sys/")
+                || p.starts_with("/dev/")
+                || p == "/etc/hosts"
+                || p == "/etc/resolv.conf"
+                || p.starts_with("/data/data/com.termux/files/usr/lib/")
+                || p.starts_with("/usr/lib/")
+                || p.starts_with("/usr/share/")
+                || p.starts_with("/lib/")
+                || p.starts_with("/lib64/")
+                || p.starts_with("/etc/ssl/")
+                || p.starts_with("/etc/pki/")
+                || p.starts_with("/system/etc/") // Whitelist Android system etc as well
+        };
+
+        if is_system_path(&normalized_orig) || is_system_path(&normalized_can) {
             return true;
         }
 
+        let normalized = normalized_can;
+
         // Get relative path from project root for matching
-        let relative_path = if let Ok(rel) = absolute_path.strip_prefix(&self.project_root) {
+        let relative_path = if let Ok(rel) = canonical_path.strip_prefix(&self.project_root) {
             rel.to_string_lossy().to_string()
         } else if let (Ok(abs_can), Ok(root_can)) = (
-            absolute_path.canonicalize(),
+            canonical_path.canonicalize(),
             self.project_root.canonicalize(),
         ) {
             if let Ok(rel) = abs_can.strip_prefix(&root_can) {
